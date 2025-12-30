@@ -1,0 +1,129 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* =========================================
+   ENTREPRENEURIA / LOVABLE DARK THEME
+   (Tailwind v4 SAFE — NO @apply TOKENS)
+   ========================================= */
+
+@layer base {
+  :root {
+    --background: 222 47% 7%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 173 100% 45%;
+    --primary-foreground: 222 47% 7%;
+
+    --secondary: 222 30% 15%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 222 30% 15%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 185 95% 50%;
+    --accent-foreground: 222 47% 7%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 222 30% 18%;
+    --input: 222 30% 18%;
+    --ring: 173 100% 45%;
+
+    --radius: 1rem;
+  }
+
+  /* IMPORTANT:
+     DO NOT use @apply bg-background in Tailwind v4
+  */
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+
+  * {
+    border-color: hsl(var(--border));
+    outline-color: hsl(var(--ring) / 0.5);
+  }
+}
+
+/* =========================================
+   GRADIENTS (Lovable-style)
+   ========================================= */
+
+.bg-gradient-hero {
+  background: radial-gradient(
+    1200px circle at top,
+    rgba(0, 255, 209, 0.08),
+    transparent 45%
+  );
+}
+
+.bg-gradient-glow {
+  background: radial-gradient(
+    circle,
+    rgba(0, 255, 209, 0.25),
+    transparent 70%
+  );
+}
+
+.text-gradient {
+  background: linear-gradient(90deg, #00ffd1, #00c3ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* =========================================
+   SHADOWS
+   ========================================= */
+
+.shadow-glow {
+  box-shadow: 0 0 40px rgba(0, 255, 209, 0.25);
+}
+
+.shadow-card {
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+}
+
+/* =========================================
+   ANIMATIONS
+   ========================================= */
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 4s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float 6s ease-in-out infinite;
+  animation-delay: 2s;
+}

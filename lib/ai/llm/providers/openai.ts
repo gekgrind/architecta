@@ -1,0 +1,58 @@
+import type { LlmClient, LlmMessage, LlmResult } from "../types";
+
+function toOpenAiMessages(messages: LlmMessage[]) {
+  return messages.map((m) => ({ role: m.role, content: m.content }));
+}
+
+export function createOpenAiClient(): LlmClient {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+
+  return {
+    provider: "openai",
+    async generate(input) {
+      const started = Date.now();
+
+      // Using fetch keeps dependencies simple.
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: input.model,
+          messages: toOpenAiMessages(input.messages),
+          temperature: input.temperature ?? 0.7,
+          max_tokens: input.maxTokens ?? 1200,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        const err: any = new Error(json?.error?.message || "OpenAI error");
+        (err.status = res.status), (err.raw = json);
+        throw err;
+      }
+
+      const text = json.choices?.[0]?.message?.content ?? "";
+      const usage = json.usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+
+      const result: LlmResult = {
+        provider: "openai",
+        model: input.model,
+        text,
+        usage: {
+          inputTokens: usage.prompt_tokens ?? 0,
+          outputTokens: usage.completion_tokens ?? 0,
+          totalTokens: usage.total_tokens ?? 0,
+        },
+        requestId: res.headers.get("x-request-id") ?? undefined,
+        latencyMs: Date.now() - started,
+      };
+
+      return result;
+    },
+  };
+}
