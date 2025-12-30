@@ -1,82 +1,81 @@
 // lib/ai/getMemoryForGeneration.ts
-import { createSupabaseServerClient } from "@/lib/supabase/client";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
-export type GenerationMemory = {
-  summary: string;          // short, model-friendly “memory context”
-  bullets: string[];        // optional debug/UI use
-};
+type MemoryMode = "generate" | "refine" | "learn";
 
-function compactLines(lines: string[], max = 12) {
-  return lines
-    .filter(Boolean)
-    .slice(0, max)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-}
-
-export async function getMemoryForGeneration(args: {
+interface GetMemoryArgs {
   userId: string;
   workspaceId?: string | null;
-  mode?: string;                 // "tweet" | "linkedin" | etc
-  idea?: string;
+  mode: MemoryMode;
   platform?: string;
-}) : Promise<GenerationMemory> {
-  const supabase = createSupabaseServerClient();
+  idea?: string;
+}
 
-  // 1) Grab learned preferences (from your "AI learns from edits" step)
-  // Adjust table/column names to match your schema.
-  const { data: prefs } = await supabase
-    .from("architecta_preferences")
-    .select("key, value, weight, updated_at")
-    .eq("user_id", args.userId)
-    .order("weight", { ascending: false })
+interface MemoryResult {
+  summary: string;
+  items: any[];
+}
+
+async function getSupabaseServer() {
+  const cookieStore = await cookies();
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+      },
+    }
+  );
+}
+
+/**
+ * Collects memory signals to guide generation/refinement
+ */
+export async function getMemoryForGeneration(
+  args: GetMemoryArgs
+): Promise<MemoryResult> {
+  const {
+    userId,
+    workspaceId = null,
+    mode,
+    platform,
+    idea,
+  } = args;
+
+  const supabase = await getSupabaseServer();
+
+  // Fetch recent memory events
+  const { data: events } = await supabase
+    .from("memory_events")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
+    .order("created_at", { ascending: false })
     .limit(20);
 
-  // 2) Grab recent refinements (what they changed after generation)
-  const { data: refinements } = await supabase
-    .from("architecta_refinements")
-    .select("before_text, after_text, mode, platform, created_at")
-    .eq("user_id", args.userId)
-    .order("created_at", { ascending: false })
-    .limit(8);
-
-  // 3) Optional: recent saved graphs / drafts (if you want style patterns)
-  const { data: saved } = await supabase
-    .from("architecta_graphs")
-    .select("title, nodes, created_at")
-    .eq("user_id", args.userId)
-    .order("created_at", { ascending: false })
-    .limit(6);
-
-  const bullets: string[] = [];
-
-  if (prefs?.length) {
-    bullets.push("User preferences (learned):");
-    for (const p of prefs) bullets.push(`- ${p.key}: ${p.value}`);
+  if (!events || events.length === 0) {
+    return {
+      summary: "No relevant memory signals yet.",
+      items: [],
+    };
   }
 
-  if (refinements?.length) {
-    bullets.push("Recent refinement patterns:");
-    for (const r of refinements) {
-      const before = (r.before_text ?? "").slice(0, 140).replace(/\s+/g, " ").trim();
-      const after = (r.after_text ?? "").slice(0, 140).replace(/\s+/g, " ").trim();
-      if (before && after) bullets.push(`- Changed: "${before}" → "${after}"`);
-    }
-  }
+  // Simple summarization logic (human-readable)
+  const summaries = events.map((event: any) => {
+    if (event.summary) return `- ${event.summary}`;
+    if (event.text) return `- ${event.text}`;
+    return null;
+  });
 
-  if (saved?.length) {
-    bullets.push("Recent work context (titles only):");
-    for (const s of saved) bullets.push(`- ${s.title ?? "Untitled"} (${new Date(s.created_at).toLocaleDateString()})`);
-  }
+  const filtered = summaries.filter(Boolean);
 
-  const compact = compactLines(bullets, 18);
-
-  const summary =
-`MEMORY CONTEXT (use as guidance, not as content to copy):
-${compact.map((l) => l.startsWith("-") ? l : l).join("\n")}
-Rules:
-- Follow these preferences unless the user request conflicts.
-- Keep outputs consistent with the user’s recent edits/style.`;
-
-  return { summary, bullets: compact };
+  return {
+    summary: filtered.join("\n"),
+    items: events,
+  };
 }
