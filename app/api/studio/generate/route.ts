@@ -1,32 +1,48 @@
 // app/api/studio/generate/route.ts
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import { createSupabaseServerClient } from "@/lib/supabase/client";
 import { getMemoryForGeneration } from "@/lib/ai/getMemoryForGeneration";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
 export const runtime = "nodejs";
 
+async function getSupabaseServer() {
+  const cookieStore = await cookies();
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+      },
+    }
+  );
+}
+
 export async function POST(req: Request) {
   try {
-    const supabase = createSupabaseServerClient();
+    const supabase = await getSupabaseServer();
 
     // 1) Auth
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth?.user) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = auth.user.id;
+    const userId = user.id;
 
     // 2) Payload
     const body = await req.json();
-    const {
-      workspaceId = null,
-      brand,
-      gen,
-    } = body;
+    const { workspaceId = null, brand, gen } = body;
 
-    // 3) Founder Style Profile (human-readable)
+    // 3) Founder Style Profile
     const { data: founderProfile } = await supabase
       .from("founder_style_profiles")
       .select("profile_text")
@@ -36,7 +52,7 @@ export async function POST(req: Request) {
       .limit(1)
       .maybeSingle();
 
-    // 4) Raw memory (preferences, refinements, etc.)
+    // 4) Memory signals
     const memory = await getMemoryForGeneration({
       userId,
       workspaceId,
@@ -45,7 +61,7 @@ export async function POST(req: Request) {
       idea: gen?.idea,
     });
 
-    // 5) Build prompt
+    // 5) Prompt
     const systemPrompt = `
 You are Architecta — an AI content architect for founders.
 
@@ -55,10 +71,10 @@ PRIORITY ORDER:
 3. Founder Style Profile
 4. Memory signals
 
-FOUNDER STYLE PROFILE (authoritative):
+FOUNDER STYLE PROFILE:
 ${founderProfile?.profile_text ?? "Not established yet."}
 
-MEMORY SIGNALS (guidance only):
+MEMORY SIGNALS:
 ${memory.summary}
 
 BRAND KIT:
@@ -68,14 +84,14 @@ GENERATION REQUEST:
 ${JSON.stringify(gen ?? {}, null, 2)}
 
 Rules:
-- Do not mention memory or profiles explicitly
-- Match founder tone and structure
-- Be concise, confident, and practical
+- Do not mention memory or profiles
+- Match founder tone
+- Be concise and practical
 - Output only the requested content
 `.trim();
 
     const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: process.env.OPENAI_API_KEY!,
     });
 
     const completion = await client.chat.completions.create({
@@ -89,10 +105,7 @@ Rules:
 
     const output = completion.choices[0]?.message?.content ?? "";
 
-    return NextResponse.json({
-      ok: true,
-      output,
-    });
+    return NextResponse.json({ ok: true, output });
   } catch (err: any) {
     return NextResponse.json(
       { error: err?.message ?? "Generate failed" },

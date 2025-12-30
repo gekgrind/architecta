@@ -1,28 +1,48 @@
 // app/api/studio/learn/route.ts
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import { createSupabaseServerClient } from "@/lib/supabase/client";
 import { aggregateMemory } from "@/lib/ai/memoryAggregator";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
 export const runtime = "nodejs";
 
+async function getSupabaseServer() {
+  const cookieStore = await cookies();
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+      },
+    }
+  );
+}
+
 export async function POST(req: Request) {
   try {
-    const supabase = createSupabaseServerClient();
+    const supabase = await getSupabaseServer();
 
     // 1) Auth
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth?.user) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = auth.user.id;
+    const userId = user.id;
 
     // 2) Payload
     const body = await req.json();
     const { workspaceId = null } = body;
 
-    // 3) Fetch memory events and aggregate
+    // 3) Memory events
     const { data: memoryEvents } = await supabase
       .from("memory_events")
       .select("*")
@@ -35,7 +55,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, skipped: true });
     }
 
-    // 4) Fetch existing Founder Style Profile
+    // 4) Existing profile
     const { data: existing } = await supabase
       .from("founder_style_profiles")
       .select("*")
@@ -45,29 +65,28 @@ export async function POST(req: Request) {
       .limit(1)
       .maybeSingle();
 
-    // 5) Ask AI to evolve the profile (human-readable)
+    // 5) AI refinement
     const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: process.env.OPENAI_API_KEY!,
     });
 
     const prompt = `
 You maintain a Founder Style Profile.
-It must be human-readable, concise, and practical.
+It must be human-readable and practical.
 
 EXISTING PROFILE:
 ${existing?.profile_text ?? "None yet."}
 
 NEW MEMORY SIGNALS:
-${aggregated.map((pref: any) => pref.summary ?? pref.text).join("\n")}
+${aggregated.map((p: any) => p.summary ?? p.text).join("\n")}
 
 Rules:
-- Update only if strong evidence exists
+- Update only with strong evidence
 - Avoid repetition
-- Write in plain English
-- No marketing fluff
-- Keep it short and clear
+- Plain English
+- Short and clear
 
-Return ONLY the updated Founder Style Profile text.
+Return ONLY the updated profile text.
 `.trim();
 
     const res = await client.chat.completions.create({
@@ -80,11 +99,8 @@ Return ONLY the updated Founder Style Profile text.
       res.choices[0]?.message?.content?.trim() ??
       existing?.profile_text;
 
-    // 6) Persist only if changed
-    if (
-      updatedProfile &&
-      updatedProfile !== existing?.profile_text
-    ) {
+    // 6) Persist if changed
+    if (updatedProfile && updatedProfile !== existing?.profile_text) {
       await supabase.from("founder_style_profiles").insert({
         user_id: userId,
         workspace_id: workspaceId,
