@@ -6,7 +6,7 @@
       "esnext"
     ],
     "allowJs": true,
-    "target": "ES6",
+    "target": "ES2022",
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
@@ -17,11 +17,15 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
+
+    "types": ["node"],
+
     "plugins": [
       {
         "name": "next"
       }
     ],
+
     "paths": {
       "@/*": [
         "./*"

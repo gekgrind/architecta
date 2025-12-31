@@ -7,10 +7,10 @@ import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { signInWithProvider } from "@/lib/auth/oauth";
 import { Button } from "@/components/ui/button";
-
 import { Github } from "lucide-react";
+import { ArchitectaPrismBackground } from "@/components/backgrounds/ArchitectaPrismBackground";
 
-type OAuthProvider = "google" | "github";
+type OAuthProvider = "google" | "github" | "apple" | "facebook";
 
 export default function SignupPage() {
   const supabase = createSupabaseBrowserClient();
@@ -23,9 +23,7 @@ export default function SignupPage() {
   const [oauthLoading, setOauthLoading] = useState<OAuthProvider | null>(null);
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => setMounted(true), []);
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
@@ -41,146 +39,178 @@ export default function SignupPage() {
     });
 
     setLoading(false);
+    if (error) return setError(error.message);
 
-    if (error) {
-      setError(error.message);
-      return;
-    }
-
-    router.push("/dashboard");
+    router.push("/onboarding");
   }
 
   async function handleOAuth(provider: OAuthProvider) {
     setOauthLoading(provider);
     setError(null);
 
-    const { error } = await signInWithProvider(provider);
-
-    if (error) {
-      setError(error.message);
+    try {
+      await signInWithProvider(provider);
+    } catch {
+      setError("Authentication failed. Please try again.");
       setOauthLoading(null);
     }
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#020617] via-[#020617] to-[#020617] px-4">
-      {/* Ambient glow */}
-      <div className="absolute inset-0 -z-10">
-        <div className="absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-teal-500/25 blur-3xl" />
-      </div>
+    <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+      {/* Prism background */}
+      <ArchitectaPrismBackground />
 
-      {/* Auth card */}
+      {/* Glass card */}
       <div
         className={[
-          "w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-8 shadow-xl backdrop-blur-xl",
+          "relative z-10 w-full max-w-md rounded-3xl",
+          "border border-white/10 bg-white/5 backdrop-blur-xl",
+          "shadow-2xl px-8 py-10",
           "transition-all duration-700 ease-out",
           mounted
             ? "opacity-100 translate-y-0 scale-100"
-            : "opacity-0 translate-y-6 scale-[0.98]",
+            : "opacity-0 translate-y-6 scale-[0.97]",
         ].join(" ")}
       >
-        {/* Create your account moment */}
-        <div className="mb-6 text-center">
-          <h1 className="text-3xl font-semibold tracking-tight text-white">
-            Create your account
-          </h1>
-          <p className="mt-2 text-sm text-white/70">
-            Start turning ideas into impact with Architecta
+        {/* edge glow */}
+        <div className="pointer-events-none absolute -inset-px rounded-3xl bg-gradient-to-br from-teal-400/20 to-transparent blur-xl" />
+
+        <div className="relative">
+          <div className="mb-6 text-center">
+            <h1 className="text-3xl font-semibold text-white">
+              Create your account
+            </h1>
+            <p className="mt-2 text-sm text-white/70">
+              Start building with Architecta
+            </p>
+          </div>
+
+          {/* OAuth */}
+          <div className="space-y-3">
+            <OAuthButton
+              label="Continue with Google"
+              loading={oauthLoading === "google"}
+              onClick={() => handleOAuth("google")}
+            />
+
+            <OAuthButton
+              label="Continue with GitHub"
+              icon={<Github className="h-5 w-5" />}
+              loading={oauthLoading === "github"}
+              onClick={() => handleOAuth("github")}
+            />
+
+            <OAuthButton
+              label="Continue with Apple"
+              icon={<AppleIcon />}
+              variant="apple"
+              loading={oauthLoading === "apple"}
+              onClick={() => handleOAuth("apple")}
+            />
+
+            <OAuthButton
+              label="Continue with Facebook"
+              icon={<FacebookIcon />}
+              variant="facebook"
+              loading={oauthLoading === "facebook"}
+              onClick={() => handleOAuth("facebook")}
+            />
+          </div>
+
+          <div className="my-6 flex items-center gap-3 text-xs text-white/40">
+            <div className="h-px flex-1 bg-white/10" />
+            or email
+            <div className="h-px flex-1 bg-white/10" />
+          </div>
+
+          <form onSubmit={handleSignup} className="space-y-4">
+            <input
+              className="glass-input"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+            <input
+              className="glass-input"
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+
+            {error && <p className="text-sm text-red-400">{error}</p>}
+
+            <Button
+              disabled={loading}
+              className="w-full bg-teal-500 text-black hover:bg-teal-400"
+            >
+              {loading ? "Creating account…" : "Create account"}
+            </Button>
+          </form>
+
+          <p className="mt-6 text-center text-sm text-white/60">
+            Already have an account?{" "}
+            <Link href="/auth/login" className="text-teal-400 hover:underline">
+              Sign in
+            </Link>
           </p>
         </div>
-
-        {/* OAuth */}
-        <div className="space-y-3">
-          <Button
-            variant="outline"
-            className="flex w-full items-center justify-center gap-3 border-white/15 bg-white/5 text-white hover:bg-white/10"
-            disabled={!!oauthLoading}
-            onClick={() => handleOAuth("google")}
-          >
-            {/* Google icon */}
-            <svg className="h-5 w-5" viewBox="0 0 48 48" aria-hidden>
-              <path
-                fill="#FFC107"
-                d="M43.611 20.083H42V20H24v8h11.303C33.643 32.91 29.234 36 24 36c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.957 3.043l5.657-5.657C34.046 6.053 29.273 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"
-              />
-              <path
-                fill="#FF3D00"
-                d="M6.306 14.691l6.571 4.819C14.655 16.108 19.002 12 24 12c3.059 0 5.842 1.154 7.957 3.043l5.657-5.657C34.046 6.053 29.273 4 24 4c-7.682 0-14.344 4.281-17.694 10.691z"
-              />
-              <path
-                fill="#4CAF50"
-                d="M24 44c5.166 0 9.86-1.977 13.409-5.197l-6.191-5.238C29.104 35.091 26.654 36 24 36c-5.213 0-9.606-3.066-11.296-7.454l-6.518 5.025C9.505 39.556 16.227 44 24 44z"
-              />
-              <path
-                fill="#1976D2"
-                d="M43.611 20.083H42V20H24v8h11.303c-1.087 2.883-3.153 5.321-5.783 6.565l.003-.002 6.191 5.238C35.287 39.556 40 35 40 24c0-1.341-.138-2.65-.389-3.917z"
-              />
-            </svg>
-
-            {oauthLoading === "google"
-              ? "Connecting to Google…"
-              : "Continue with Google"}
-          </Button>
-
-          <Button
-            variant="outline"
-            className="flex w-full items-center justify-center gap-3 border-white/15 bg-white/5 text-white hover:bg-white/10"
-            disabled={!!oauthLoading}
-            onClick={() => handleOAuth("github")}
-          >
-            <Github className="h-5 w-5" />
-            {oauthLoading === "github"
-              ? "Connecting to GitHub…"
-              : "Continue with GitHub"}
-          </Button>
-        </div>
-
-        <div className="my-6 flex items-center gap-3 text-xs text-white/40">
-          <div className="h-px flex-1 bg-white/10" />
-          or sign up with email
-          <div className="h-px flex-1 bg-white/10" />
-        </div>
-
-        {/* Email signup */}
-        <form onSubmit={handleSignup} className="space-y-4">
-          <input
-            type="email"
-            placeholder="Email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white placeholder:text-white/40 focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
-          />
-
-          <input
-            type="password"
-            placeholder="Password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white placeholder:text-white/40 focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
-          />
-
-          {error && <p className="text-sm text-red-400">{error}</p>}
-
-          <Button
-            disabled={loading}
-            className="w-full bg-teal-500 text-black hover:bg-teal-400"
-          >
-            {loading ? "Creating account…" : "Create account"}
-          </Button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-white/60">
-          Already have an account?{" "}
-          <Link
-            href="/auth/login"
-            className="font-medium text-teal-400 hover:underline"
-          >
-            Sign in
-          </Link>
-        </p>
       </div>
     </div>
+  );
+}
+
+/* ---------- Components ---------- */
+
+function OAuthButton({
+  label,
+  icon,
+  onClick,
+  loading,
+  variant,
+}: {
+  label: string;
+  icon?: React.ReactNode;
+  onClick: () => void;
+  loading?: boolean;
+  variant?: "apple" | "facebook";
+}) {
+  const glow =
+    variant === "apple"
+      ? "hover:shadow-[0_0_0_1px_rgba(255,255,255,0.25),0_12px_40px_rgba(255,255,255,0.15)]"
+      : variant === "facebook"
+      ? "hover:shadow-[0_0_0_1px_rgba(24,119,242,0.5),0_12px_40px_rgba(24,119,242,0.3)]"
+      : "";
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={loading}
+      className={["glass-oauth", glow].join(" ")}
+    >
+      {icon}
+      <span className="flex-1 text-sm font-medium">
+        {loading ? "Connecting…" : label}
+      </span>
+    </button>
+  );
+}
+
+function AppleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5 fill-white">
+      <path d="M16.365 1.43c0 1.14-.46 2.18-1.23 2.95-.78.78-1.94 1.37-3.02 1.28-.14-1.08.36-2.23 1.16-3.02.78-.78 2.04-1.36 3.09-1.21zM20.44 17.13c-.56 1.29-.83 1.87-1.56 3.03-1.02 1.59-2.46 3.56-4.23 3.57-1.56.01-1.96-.99-3.98-.99-2.02 0-2.46 1.01-4.02.99-1.77-.02-3.13-1.78-4.15-3.37-2.83-4.4-3.13-9.56-1.38-12.24 1.24-1.92 3.2-3.04 5.03-3.04 1.86 0 3.03 1.01 4.56 1.01 1.49 0 2.4-1.02 4.55-1.02 1.63 0 3.36.9 4.6 2.45-4.03 2.21-3.38 7.96.58 9.61z" />
+    </svg>
+  );
+}
+
+function FacebookIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5 fill-[#1877F2]">
+      <path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073c0 6.017 4.388 11.01 10.125 11.927v-8.437H7.078v-3.49h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953h-1.513c-1.49 0-1.953.93-1.953 1.887v2.266h3.328l-.532 3.49h-2.796V24C19.612 23.083 24 18.09 24 12.073z" />
+    </svg>
   );
 }

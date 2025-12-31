@@ -1,7 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/studio", "/app"]; // customize
+const PROTECTED_PREFIXES = ["/dashboard", "/studio", "/app"];
+const ONBOARDING_PATH = "/onboarding";
+const LOGIN_PATH = "/auth/login";
+const SIGNUP_PATH = "/auth/signup";
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
@@ -24,24 +27,65 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  // ✅ This refreshes session cookies when needed
+  // 🔐 Refresh session if needed
   const { data } = await supabase.auth.getUser();
   const user = data.user;
 
-  const isProtected = PROTECTED_PREFIXES.some((p) => req.nextUrl.pathname.startsWith(p));
+  const pathname = req.nextUrl.pathname;
+
+  const isProtected = PROTECTED_PREFIXES.some((p) =>
+    pathname.startsWith(p)
+  );
+
+  const isAuthPage =
+    pathname === LOGIN_PATH || pathname === SIGNUP_PATH;
+
+  const isOnboarding =
+    pathname === ONBOARDING_PATH || pathname.startsWith(`${ONBOARDING_PATH}/`);
+
+  /* ---------------------------------------------------------
+     1️⃣ AUTH GUARD (your existing logic, unchanged)
+  --------------------------------------------------------- */
 
   if (isProtected && !user) {
     const url = req.nextUrl.clone();
-    url.pathname = "/auth/login";
-    url.searchParams.set("next", req.nextUrl.pathname);
+    url.pathname = LOGIN_PATH;
+    url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
 
-  // Optional: if logged in and trying to hit login page, bounce to dashboard
-  if ((req.nextUrl.pathname === "/auth/login" || req.nextUrl.pathname === "/auth/signup") && user) {
+  if (isAuthPage && user) {
     const url = req.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
+  }
+
+  /* ---------------------------------------------------------
+     2️⃣ ARCHITECTA ONBOARDING GUARD
+     - Applies ONLY to authenticated users
+     - Applies ONLY to Architecta areas
+     - Does NOT run on onboarding routes
+  --------------------------------------------------------- */
+
+  const isArchitectaArea =
+    pathname.startsWith("/studio") ||
+    pathname.startsWith("/app/architecta");
+
+  if (user && isArchitectaArea && !isOnboarding) {
+    // Check onboarding status
+    const { data: session, error } = await supabase
+      .from("onboarding_sessions")
+      .select("status")
+      .eq("user_id", user.id)
+      .eq("app", "architecta")
+      .maybeSingle();
+
+    // If no session OR not completed → force onboarding
+    if (!session || session.status !== "completed") {
+      const url = req.nextUrl.clone();
+      url.pathname = ONBOARDING_PATH;
+      return NextResponse.redirect(url);
+    }
   }
 
   return res;

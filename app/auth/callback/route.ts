@@ -2,24 +2,45 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
-  const code = searchParams.get("code");
+  const url = new URL(request.url);
+  const code = url.searchParams.get("code");
 
+  // No code = nothing to exchange
   if (!code) {
     return NextResponse.redirect(
-      `${origin}/auth/login?error=missing_code`
+      new URL("/auth/login", request.url)
     );
   }
 
   const supabase = await createSupabaseServerClient();
 
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  // 1️⃣ Exchange code for session (sets cookies)
+  const { data, error } =
+    await supabase.auth.exchangeCodeForSession(code);
 
-  if (error) {
+  if (error || !data.session || !data.user) {
     return NextResponse.redirect(
-      `${origin}/auth/login?error=${encodeURIComponent(error.message)}`
+      new URL("/auth/login", request.url)
     );
   }
 
-  return NextResponse.redirect(`${origin}/dashboard`);
+  const userId = data.user.id;
+
+  // 2️⃣ Check onboarding state
+  const { data: onboarding } = await supabase
+    .from("architecta_onboarding")
+    .select("status")
+    .eq("user_id", userId)
+    .single();
+
+  // 3️⃣ Route correctly
+  if (!onboarding || onboarding.status !== "completed") {
+    return NextResponse.redirect(
+      new URL("/auth/onboarding", request.url)
+    );
+  }
+
+  return NextResponse.redirect(
+    new URL("/dashboard", request.url)
+  );
 }
