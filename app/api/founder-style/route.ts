@@ -1,66 +1,103 @@
-import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase/client";
+import { apiError, apiOk, parseJsonBody } from "@/lib/api/response";
+import { getAuthenticatedUser } from "@/lib/auth/server";
+import type { FounderProfile } from "@/lib/domain";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-export async function GET(req: Request) {
-  const supabase = createSupabaseServerClient();
+type FounderStyleSaveRequest = {
+  workspaceId?: string | null;
+  profileText?: string;
+};
 
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+function toFounderProfile(row: Record<string, unknown>, userId: string): FounderProfile {
+  return {
+    id: typeof row.id === "string" ? row.id : undefined,
+    userId,
+    workspaceId: typeof row.workspace_id === "string" ? row.workspace_id : null,
+    profileText: String(row.profile_text ?? ""),
+    confidenceScore: Number(row.confidence_score ?? 0),
+    version: Number(row.version ?? 0),
+    createdAt: typeof row.created_at === "string" ? row.created_at : undefined,
+    updatedAt: typeof row.updated_at === "string" ? row.updated_at : undefined,
+  };
+}
+
+export async function GET(req: Request) {
+  const supabase = await createSupabaseServiceClient();
+  const session = await getAuthenticatedUser(supabase);
+  if (!session) return apiError("unauthorized", "Unauthorized");
 
   const { searchParams } = new URL(req.url);
   const workspaceId = searchParams.get("workspaceId");
 
-  const { data } = await supabase
+  if (!workspaceId) {
+    return apiError("validation_error", "Missing workspaceId");
+  }
+
+  const { data, error } = await supabase
     .from("founder_style_profiles")
     .select("*")
-    .eq("user_id", auth.user.id)
+    .eq("user_id", session.user.id)
     .eq("workspace_id", workspaceId)
     .order("version", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  return NextResponse.json({ profile: data });
+  if (error) return apiError("server_error", error.message);
+
+  return apiOk({
+    profile: data ? toFounderProfile(data, session.user.id) : null,
+  });
 }
 
 export async function POST(req: Request) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServiceClient();
+  const session = await getAuthenticatedUser(supabase);
+  if (!session) return apiError("unauthorized", "Unauthorized");
 
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const body = await parseJsonBody<FounderStyleSaveRequest>(req);
+  const workspaceId = body?.workspaceId;
+  const profileText = body?.profileText?.trim();
+
+  if (!workspaceId) {
+    return apiError("validation_error", "Missing workspaceId");
   }
-
-  const body = await req.json();
-  const { workspaceId, profileText } = body;
 
   if (!profileText || profileText.length < 20) {
-    return NextResponse.json(
-      { error: "Profile text too short" },
-      { status: 400 }
-    );
+    return apiError("validation_error", "Profile text too short");
   }
 
-  // get current version
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from("founder_style_profiles")
     .select("version, confidence_score")
-    .eq("user_id", auth.user.id)
+    .eq("user_id", session.user.id)
     .eq("workspace_id", workspaceId)
     .order("version", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  await supabase.from("founder_style_profiles").insert({
-    user_id: auth.user.id,
+  if (existingError) return apiError("server_error", existingError.message);
+
+  const nextVersion = Number(existing?.version ?? 0) + 1;
+  const confidenceScore = Math.min(
+    1,
+    Number(existing?.confidence_score ?? 0.5) + 0.1
+  );
+
+  const { error } = await supabase.from("founder_style_profiles").insert({
+    user_id: session.user.id,
     workspace_id: workspaceId,
     profile_text: profileText,
-    version: (existing?.version ?? 0) + 1,
-    confidence_score: Math.min(1, (existing?.confidence_score ?? 0.5) + 0.1),
+    version: nextVersion,
+    confidence_score: confidenceScore,
   });
 
-  return NextResponse.json({ ok: true });
+  if (error) return apiError("server_error", error.message);
+
+  return apiOk({
+    saved: true,
+    version: nextVersion,
+    confidenceScore,
+  });
 }

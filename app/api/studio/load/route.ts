@@ -1,14 +1,16 @@
-// app/api/studio/load/route.ts
-import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase/client";
+import { apiError, apiOk } from "@/lib/api/response";
+import type { StudioGraphRecord } from "@/lib/domain";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
+
+export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServiceClient();
   const { searchParams } = new URL(req.url);
   const graphId = searchParams.get("graphId");
 
   if (!graphId) {
-    return NextResponse.json({ error: "graphId required" }, { status: 400 });
+    return apiError("validation_error", "graphId required");
   }
 
   const { data, error } = await supabase
@@ -18,8 +20,17 @@ export async function GET(req: Request) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return apiError("server_error", error.message);
   }
 
-  return NextResponse.json(data);
+  const graph: StudioGraphRecord = {
+    id: data.id,
+    userId: data.user_id,
+    workspaceId: data.workspace_id,
+    graph: data.graph,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+
+  return apiOk({ graph });
 }

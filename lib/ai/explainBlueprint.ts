@@ -46,15 +46,15 @@ export function explainBlueprint(
 
   // Helper to describe a node safely
   function describeNode(node: GraphNode, index: number) {
-    const data = node.data as any;
+    const data = node.data;
 
     if (data && typeof data === "object") {
-      if (typeof data.idea === "string") {
-        return `Step ${index + 1}: ${data.idea}`;
+      if (typeof (data as { idea?: unknown }).idea === "string") {
+        return `Step ${index + 1}: ${(data as { idea: string }).idea}`;
       }
 
-      if (typeof data.label === "string") {
-        return `Step ${index + 1}: ${data.label}`;
+      if (typeof (data as { label?: unknown }).label === "string") {
+        return `Step ${index + 1}: ${(data as { label: string }).label}`;
       }
     }
 

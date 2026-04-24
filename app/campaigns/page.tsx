@@ -2,9 +2,14 @@
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { EmptyState } from "@/components/ui/empty-state"
+import type { Campaign } from "@/lib/domain"
 import { Target } from "lucide-react"
 
+const placeholderCampaigns: Campaign[] = []
+
 export default function CampaignsPage() {
+  void placeholderCampaigns
+
   return (
     <DashboardLayout breadcrumbs={[{ label: "Campaigns" }]}>
       <EmptyState

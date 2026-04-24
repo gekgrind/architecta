@@ -1,5 +1,25 @@
 import type { LlmClient, LlmMessage, LlmResult } from "../types";
 
+type AnthropicMessageResponse = {
+  content?: Array<
+    | {
+        type: "text";
+        text: string;
+      }
+    | {
+        type: string;
+        text?: string;
+      }
+  >;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+  };
+  error?: {
+    message?: string;
+  };
+};
+
 function toAnthropicMessages(messages: LlmMessage[]) {
   // Anthropic supports "system" separately; we’ll merge system into a single system string.
   const systemParts = messages.filter((m) => m.role === "system").map((m) => m.content);
@@ -39,17 +59,19 @@ export function createAnthropicClient(): LlmClient {
         }),
       });
 
-      const json = await res.json();
+      const json = (await res.json()) as AnthropicMessageResponse;
 
       if (!res.ok) {
-        const err: any = new Error(json?.error?.message || "Anthropic error");
-        (err.status = res.status), (err.raw = json);
+        const err = Object.assign(new Error(json.error?.message || "Anthropic error"), {
+          status: res.status,
+          raw: json,
+        });
         throw err;
       }
 
       const text = (json.content ?? [])
-        .filter((c: any) => c.type === "text")
-        .map((c: any) => c.text)
+        .filter((c): c is { type: "text"; text: string } => c.type === "text" && typeof c.text === "string")
+        .map((c) => c.text)
         .join("\n");
 
       const usage = json.usage ?? { input_tokens: 0, output_tokens: 0 };

@@ -1,49 +1,29 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { apiError, apiOk, parseJsonBody } from "@/lib/api/response";
+import { getAuthenticatedUser } from "@/lib/auth/server";
+import type { StudioSaveRequest } from "@/lib/domain";
+import { isStudioGraph } from "@/lib/domain";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-
-type MemorySignal = {
-  signal_type: "tone" | "length" | "cta" | "structure" | string;
-  signal_value: string;
-  confidence?: number; // default applied server-side
-  source?: "architecta" | "prospra" | string; // default = "architecta"
-};
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => null);
-    const { graph, meta, memorySignals } = body ?? {};
+    const body = await parseJsonBody<StudioSaveRequest>(req);
+    const graph = body?.graph;
 
-    if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) {
-      return NextResponse.json(
-        { ok: false, error: "Invalid graph payload" },
-        { status: 400 }
-      );
+    if (!isStudioGraph(graph)) {
+      return apiError("validation_error", "Invalid graph payload");
     }
 
-    // ✅ Cookie-auth Supabase client (RLS-safe)
-    const supabase = createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient();
+    const session = await getAuthenticatedUser(supabase);
+    if (!session) return apiError("unauthorized", "Unauthorized");
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    const workspaceId = body?.meta?.workspaceId ?? null;
 
-    if (authError || !user) {
-      return NextResponse.json(
-        { ok: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
-    const workspaceId: string | null = meta?.workspaceId ?? null;
-
-    // Upsert graph (one per user/workspace)
     const { error: saveError } = await supabase
       .from("studio_graphs")
       .upsert(
         {
-          user_id: user.id,
+          user_id: session.user.id,
           workspace_id: workspaceId,
           graph,
         },
@@ -52,44 +32,31 @@ export async function POST(req: Request) {
 
     if (saveError) {
       console.error("Supabase save error:", saveError);
-      return NextResponse.json(
-        { ok: false, error: saveError.message },
-        { status: 500 }
-      );
+      return apiError("server_error", saveError.message);
     }
 
-    // ------------------------------------------------------------
-    // Optional: AI memory learning signals (safe no-op if absent)
-    // ------------------------------------------------------------
-    if (Array.isArray(memorySignals) && memorySignals.length > 0) {
-      const rows = (memorySignals as MemorySignal[])
-        .map((s) => ({
-          user_id: user.id,
-          source: s.source ?? "architecta",
-          signal_type: s.signal_type,
-          signal_value: s.signal_value,
-          confidence: Math.max(0.05, Math.min(1, s.confidence ?? 0.1)),
-        }))
-        .filter((r) => !!r.signal_type && !!r.signal_value);
+    const memorySignals = body?.memorySignals ?? [];
+    const rows = memorySignals
+      .map((signal) => ({
+        user_id: session.user.id,
+        source: signal.source ?? "architecta",
+        signal_type: signal.signalType,
+        signal_value: signal.signalValue,
+        confidence: Math.max(0.05, Math.min(1, signal.confidence ?? 0.1)),
+      }))
+      .filter((row) => row.signal_type && row.signal_value);
 
-      if (rows.length) {
-        // Insert lightweight preferences. (If you prefer “increment confidence”
-        // behavior, we’ll handle that in a dedicated memory route/helper.)
-        const { error: memError } = await supabase
-          .from("ai_edit_memory")
-          .insert(rows);
+    if (rows.length > 0) {
+      const { error: memError } = await supabase
+        .from("ai_edit_memory")
+        .insert(rows);
 
-        // Do NOT fail the save if memory insert fails.
-        if (memError) console.warn("AI memory insert warning:", memError);
-      }
+      if (memError) console.warn("AI memory insert warning:", memError);
     }
 
-    return NextResponse.json({ ok: true });
+    return apiOk({ saved: true });
   } catch (err) {
     console.error("Studio save route error:", err);
-    return NextResponse.json(
-      { ok: false, error: "Server error" },
-      { status: 500 }
-    );
+    return apiError("server_error", "Server error");
   }
 }

@@ -57,7 +57,7 @@ export function ContentLibrary() {
     filteredContent = filteredContent.filter((item) => item.campaign === filters.campaign)
   }
   if (filters.tags.length > 0) {
-    filteredContent = filteredContent.filter((item) => filters.tags.some((tag) => item.tags.includes(tag)))
+    filteredContent = filteredContent.filter((item) => filters.tags.some((tag) => item.tags?.includes(tag)))
   }
 
   // Apply sort

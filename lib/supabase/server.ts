@@ -1,23 +1,33 @@
-// lib/supabase/server.ts
-import { cookies } from "next/headers";
+import "server-only";
+
 import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+import { getEcosystemCookieDomain } from "@/lib/config/ecosystem";
 
 export async function createSupabaseServerClient() {
-  const cookieStore = await cookies(); // ✅ THIS is the fix
+  const cookieStore = await cookies();
+  const sharedCookieDomain = getEcosystemCookieDomain();
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
+        getAll() {
+          return cookieStore.getAll();
         },
-        set(name: string, value: string, options: any) {
-          cookieStore.set(name, value, options);
-        },
-        remove(name: string) {
-          cookieStore.delete(name);
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, {
+                ...options,
+                ...(sharedCookieDomain ? { domain: sharedCookieDomain } : {}),
+              });
+            });
+          } catch {
+            // Route handlers still update cookies correctly; Server Components may not.
+          }
         },
       },
     }

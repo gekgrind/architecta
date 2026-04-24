@@ -1,27 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
+import { useEffect, useState } from "react";
+
+import { useAuthIdentity } from "@/hooks/use-auth-identity";
+import {
+  buildSharedLoginHref,
+  buildSharedSignupHref,
+} from "@/lib/auth/redirects";
 import { Button } from "@/components/ui/button";
-import { Menu, X, ArrowRight } from "lucide-react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const Navbar = () => {
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [isScrolled, setIsScrolled] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { loading, isAuthenticated } = useAuthIdentity();
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setIsAuthenticated(!!data.session);
-    });
-  }, [supabase]);
 
   return (
     <nav
@@ -37,14 +35,14 @@ const Navbar = () => {
             Architecta<span className="text-gradient">.</span>
           </Link>
 
-          {!isAuthenticated ? (
+          {!loading && !isAuthenticated ? (
             <div className="flex items-center gap-4">
               <Button asChild variant="ghost" size="sm">
-                <Link href="/auth/login">Sign In</Link>
+                <Link href={buildSharedLoginHref()}>Sign In</Link>
               </Button>
 
               <Button asChild>
-                <Link href="/auth/signup">Start Free</Link>
+                <Link href={buildSharedSignupHref()}>Start Free</Link>
               </Button>
             </div>
           ) : (

@@ -12,14 +12,14 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 
+import { useAuthIdentity } from "@/hooks/use-auth-identity";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
-const supabase = createSupabaseBrowserClient();
-
-// Custom node types
 import AINode from "./nodes/AINode";
 import DecisionNode from "./nodes/DecisionNode";
 import OutputNode from "./nodes/OutputNode";
+
+const supabase = createSupabaseBrowserClient();
 
 interface BlueprintCanvasProps {
   onSelectNode: (node: {
@@ -40,22 +40,19 @@ export default function BlueprintCanvas({
   onSelectNode,
   onGraphChange,
 }: BlueprintCanvasProps) {
+  const { user } = useAuthIdentity();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-
   const lastGraphRef = useRef<{ nodes: Node[]; edges: Edge[] } | null>(null);
-
-  /* -------- LOAD -------- */
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) return;
+      if (!user) return;
 
       const res = await supabase
         .from("blueprints")
         .select("nodes, edges")
-        .eq("user_id", data.user.id)
+        .eq("user_id", user.id)
         .single();
 
       if (res.data?.nodes?.length) {
@@ -74,18 +71,15 @@ export default function BlueprintCanvas({
       }
     }
 
-    load();
-  }, [setNodes, setEdges]);
-
-  /* -------- SAVE (debounced) -------- */
+    void load();
+  }, [setEdges, setNodes, user]);
 
   useEffect(() => {
     const t = setTimeout(async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) return;
+      if (!user) return;
 
       await supabase.from("blueprints").upsert({
-        user_id: data.user.id,
+        user_id: user.id,
         nodes,
         edges,
         updated_at: new Date().toISOString(),
@@ -93,9 +87,7 @@ export default function BlueprintCanvas({
     }, 600);
 
     return () => clearTimeout(t);
-  }, [nodes, edges]);
-
-  /* -------- AI SUGGESTION → ADD NODE -------- */
+  }, [edges, nodes, user]);
 
   const addNode = useCallback(
     (sourceId: string, label: string) => {
@@ -122,7 +114,7 @@ export default function BlueprintCanvas({
         },
       ]);
     },
-    [nodes]
+    [nodes, setEdges, setNodes]
   );
 
   useEffect(() => {
@@ -134,8 +126,6 @@ export default function BlueprintCanvas({
     document.addEventListener("studio:add-node", handler);
     return () => document.removeEventListener("studio:add-node", handler);
   }, [addNode]);
-
-  /* -------- GRAPH UPDATES (GUARDED) -------- */
 
   useEffect(() => {
     const last = lastGraphRef.current;

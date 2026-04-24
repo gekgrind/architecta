@@ -16,8 +16,18 @@ function getClient(deps: GatewayDeps, provider: LlmProvider): LlmClient {
   return provider === "openai" ? deps.openai : deps.anthropic;
 }
 
-function isRetryable(err: any): boolean {
-  const status = err?.status;
+function getErrorStatus(err: unknown): number | undefined {
+  return typeof err === "object" && err !== null && "status" in err
+    ? Number((err as { status?: unknown }).status)
+    : undefined;
+}
+
+function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "LLM request failed";
+}
+
+function isRetryable(err: unknown): boolean {
+  const status = getErrorStatus(err);
   // 429 / 5xx are usually retryable. Also allow network errors.
   if (!status) return true;
   return status === 429 || (status >= 500 && status <= 599);
@@ -58,7 +68,7 @@ export function createLlmGateway(deps: GatewayDeps) {
 
       const chain = [plan.primary, ...plan.fallbacks];
 
-      let lastErr: any = null;
+      let lastErr: unknown = null;
 
       for (let i = 0; i < chain.length; i++) {
         const step = chain[i];
@@ -85,17 +95,20 @@ export function createLlmGateway(deps: GatewayDeps) {
             await logLlmCall({ input, result: final, routeReason });
 
             return final;
-          } catch (err: any) {
+          } catch (err: unknown) {
             lastErr = err;
             if (!isRetryable(err) || attempt === 2) break;
           }
         }
       }
 
-      const message = lastErr?.message ?? "LLM request failed";
-      const e = new Error(message);
-      (e as any).raw = lastErr?.raw;
-      (e as any).status = lastErr?.status;
+      const e = Object.assign(new Error(getErrorMessage(lastErr)), {
+        raw:
+          typeof lastErr === "object" && lastErr !== null && "raw" in lastErr
+            ? (lastErr as { raw?: unknown }).raw
+            : undefined,
+        status: getErrorStatus(lastErr),
+      });
       throw e;
     },
   };

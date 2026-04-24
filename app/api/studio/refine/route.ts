@@ -1,78 +1,65 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import OpenAI from "openai";
+import { apiError, apiOk, parseJsonBody } from "@/lib/api/response";
+import { getAuthenticatedUser } from "@/lib/auth/server";
+import type { StudioRefineRequest, StudioRefineResult } from "@/lib/domain";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
-type Revision = {
-  tone?: "clearer" | "bolder" | "same";
-  length?: "shorter" | "same" | "longer";
-  ctaStrength?: "subtle" | "same" | "stronger";
-};
-
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => null);
-    const { platform, draft, revision, brand } = body ?? {};
+    const body = await parseJsonBody<StudioRefineRequest>(req);
 
-    if (!platform || !draft || !revision) {
-      return NextResponse.json(
-        { ok: false, error: "Missing refine payload" },
-        { status: 400 }
-      );
+    if (!body?.platform || !body.draft || !body.revision) {
+      return apiError("validation_error", "Missing refine payload");
     }
 
-    // ✅ RLS-safe Supabase client
-    const supabase = createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient();
+    const session = await getAuthenticatedUser(supabase);
+    if (!session) return apiError("unauthorized", "Unauthorized");
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { ok: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
-    /* ------------------------------------------------------------
-     * Build refinement instructions
-     * ---------------------------------------------------------- */
     const instructions: string[] = [];
 
-    if (revision.tone === "clearer") instructions.push("Make the tone clearer and more direct.");
-    if (revision.tone === "bolder") instructions.push("Make the tone bolder and more confident.");
-
-    if (revision.length === "shorter") instructions.push("Make the content more concise.");
-    if (revision.length === "longer") instructions.push("Expand the content slightly.");
-
-    if (revision.ctaStrength === "stronger") instructions.push("Strengthen the call to action.");
-    if (revision.ctaStrength === "subtle") instructions.push("Soften the call to action.");
+    if (body.revision.tone === "clearer") {
+      instructions.push("Make the tone clearer and more direct.");
+    }
+    if (body.revision.tone === "bolder") {
+      instructions.push("Make the tone bolder and more confident.");
+    }
+    if (body.revision.length === "shorter") {
+      instructions.push("Make the content more concise.");
+    }
+    if (body.revision.length === "longer") {
+      instructions.push("Expand the content slightly.");
+    }
+    if (body.revision.ctaStrength === "stronger") {
+      instructions.push("Strengthen the call to action.");
+    }
+    if (body.revision.ctaStrength === "subtle") {
+      instructions.push("Soften the call to action.");
+    }
 
     const systemPrompt = `
 You are a professional marketing writer.
 Preserve the original intent.
 Do not introduce new ideas.
 Apply only the requested refinements.
-`;
+`.trim();
 
     const userPrompt = `
-Platform: ${platform}
-Brand: ${brand?.brandName ?? "Unknown"}
+Platform: ${body.platform}
+Brand: ${body.brand?.brandName ?? "Unknown"}
 
 Original draft:
 """
-${draft}
+${body.draft}
 """
 
 Refinement instructions:
 - ${instructions.join("\n- ")}
-`;
+`.trim();
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
@@ -83,16 +70,9 @@ Refinement instructions:
       temperature: 0.4,
     });
 
-    const refinedText =
-      completion.choices[0]?.message?.content?.trim();
+    const text = completion.choices[0]?.message?.content?.trim();
+    if (!text) return apiError("upstream_error", "No refined output returned");
 
-    if (!refinedText) {
-      throw new Error("No refined output returned");
-    }
-
-    /* ------------------------------------------------------------
-     * AI MEMORY LEARNING (this is the magic)
-     * ---------------------------------------------------------- */
     const memorySignals: {
       signal_type: string;
       signal_value: string;
@@ -100,28 +80,26 @@ Refinement instructions:
       source: string;
     }[] = [];
 
-    if (revision.length && revision.length !== "same") {
+    if (body.revision.length && body.revision.length !== "same") {
       memorySignals.push({
         signal_type: "length",
-        signal_value: revision.length,
+        signal_value: body.revision.length,
         confidence: 0.15,
         source: "architecta",
       });
     }
-
-    if (revision.tone && revision.tone !== "same") {
+    if (body.revision.tone && body.revision.tone !== "same") {
       memorySignals.push({
         signal_type: "tone",
-        signal_value: revision.tone,
+        signal_value: body.revision.tone,
         confidence: 0.15,
         source: "architecta",
       });
     }
-
-    if (revision.ctaStrength && revision.ctaStrength !== "same") {
+    if (body.revision.ctaStrength && body.revision.ctaStrength !== "same") {
       memorySignals.push({
         signal_type: "cta",
-        signal_value: revision.ctaStrength,
+        signal_value: body.revision.ctaStrength,
         confidence: 0.1,
         source: "architecta",
       });
@@ -130,28 +108,19 @@ Refinement instructions:
     if (memorySignals.length > 0) {
       const { error: memError } = await supabase
         .from("ai_edit_memory")
-        .insert(
-          memorySignals.map((m) => ({
-            ...m,
-            user_id: user.id,
-          }))
-        );
+        .insert(memorySignals.map((signal) => ({ ...signal, user_id: session.user.id })));
 
-      // Memory failure should never block refinement
-      if (memError) {
-        console.warn("AI memory insert warning:", memError);
-      }
+      if (memError) console.warn("AI memory insert warning:", memError);
     }
 
-    return NextResponse.json({
-      ok: true,
-      text: refinedText,
-    });
-  } catch (err) {
+    const result: StudioRefineResult = {
+      text,
+      createdAt: new Date().toISOString(),
+    };
+
+    return apiOk({ refinement: result });
+  } catch (err: unknown) {
     console.error("Studio refine route error:", err);
-    return NextResponse.json(
-      { ok: false, error: "Server error" },
-      { status: 500 }
-    );
+    return apiError("server_error", "Server error");
   }
 }

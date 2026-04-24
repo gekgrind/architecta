@@ -77,7 +77,7 @@ export function GenerateStudio() {
 }
 
 function generateMockContent(config: GenerationUIConfig): string {
-  const templates: PartialRecord<ContentType, string>= {
+  const templates: Partial<Record<ContentType, string>> = {
     tweet: `The secret to ${config.topic || "success"}?
 
 It's not about working harder.
@@ -173,5 +173,5 @@ ${
 }`,
   };
 
-  return templates[config.contentType] ?? templates.linkedin;
+  return templates[config.contentType] ?? templates.linkedin ?? "";
 }
