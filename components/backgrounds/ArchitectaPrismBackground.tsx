@@ -14,26 +14,28 @@ export default function ArchitectaPrismBackground({ preset }: Props) {
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
+    const frame = requestAnimationFrame(() => {
+      checkMobile();
+      const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+      setReducedMotion(media.matches);
+    });
     window.addEventListener("resize", checkMobile);
 
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReducedMotion(media.matches);
-
-    return () => window.removeEventListener("resize", checkMobile);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", checkMobile);
+    };
   }, []);
 
   const base = prismPresets[preset];
 
   const finalProps = {
     ...base,
-    // mobile dial-down
     ...(isMobile && {
       scale: base.scale * 0.85,
       glow: base.glow * 0.8,
       timeScale: base.timeScale * 0.7,
     }),
-    // accessibility dial-down
     ...(reducedMotion && {
       timeScale: 0.1,
     }),

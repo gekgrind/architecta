@@ -1,32 +1,43 @@
 "use client";
 
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Search, Bell, HelpCircle, ChevronRight, Settings, LogOut, User } from "lucide-react";
+
+import { useAuthIdentity } from "@/hooks/use-auth-identity";
+import { buildSharedLoginHref } from "@/lib/auth/redirects";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Search, Bell, HelpCircle, ChevronRight, Settings, LogOut, User } from "lucide-react"
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 
 interface HeaderProps {
-  breadcrumbs?: { label: string; href?: string }[]
-  className?: string
+  breadcrumbs?: { label: string; href?: string }[];
+  className?: string;
 }
 
 export function Header({ breadcrumbs = [], className }: HeaderProps) {
+  const supabase = createSupabaseBrowserClient();
+  const { avatarUrl, displayName } = useAuthIdentity();
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    window.location.assign(buildSharedLoginHref());
+  }
+
   return (
     <header
       className={cn(
         "sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6",
-        className,
+        className
       )}
     >
-      {/* Breadcrumbs */}
       <nav className="flex items-center gap-1 text-sm">
         {breadcrumbs.map((crumb, index) => (
           <div key={index} className="flex items-center gap-1">
@@ -35,7 +46,7 @@ export function Header({ breadcrumbs = [], className }: HeaderProps) {
               className={cn(
                 index === breadcrumbs.length - 1
                   ? "font-medium text-foreground"
-                  : "text-muted-foreground hover:text-foreground cursor-pointer",
+                  : "text-muted-foreground hover:text-foreground cursor-pointer"
               )}
             >
               {crumb.label}
@@ -44,7 +55,6 @@ export function Header({ breadcrumbs = [], className }: HeaderProps) {
         ))}
       </nav>
 
-      {/* Search */}
       <div className="flex-1 max-w-md mx-8">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -55,7 +65,6 @@ export function Header({ breadcrumbs = [], className }: HeaderProps) {
         </div>
       </div>
 
-      {/* Actions */}
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
           <Bell className="h-5 w-5" />
@@ -68,8 +77,10 @@ export function Header({ breadcrumbs = [], className }: HeaderProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="ml-2">
               <Avatar className="h-8 w-8">
-                <AvatarImage src="/professional-avatar.png" />
-                <AvatarFallback className="bg-primary text-primary-foreground text-sm">JD</AvatarFallback>
+                <AvatarImage src={avatarUrl} />
+                <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                  {displayName.slice(0, 1).toUpperCase()}
+                </AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
@@ -83,7 +94,7 @@ export function Header({ breadcrumbs = [], className }: HeaderProps) {
               Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-red-600">
+            <DropdownMenuItem className="text-red-600" onClick={() => void handleLogout()}>
               <LogOut className="mr-2 h-4 w-4" />
               Log out
             </DropdownMenuItem>
@@ -91,5 +102,5 @@ export function Header({ breadcrumbs = [], className }: HeaderProps) {
         </DropdownMenu>
       </div>
     </header>
-  )
+  );
 }

@@ -11,6 +11,7 @@ import {
   SelectedNode,
   Suggestion,
   GraphState,
+  ContentNodeData,
   isContentNodeData,
 } from "./studioTypes";
 
@@ -37,7 +38,7 @@ export default function StudioShell() {
   const isSavingRef = useRef(false);
   const queuedSaveRef = useRef(false);
 
-  const [saveStatus, setSaveStatus] = useState<
+  const [, setSaveStatus] = useState<
     "idle" | "dirty" | "saving" | "saved" | "error"
   >("idle");
 
@@ -66,7 +67,7 @@ export default function StudioShell() {
         const json = await res.json().catch(() => null);
 
         if (!res.ok || !json?.ok) {
-          throw new Error(json?.error || `Save failed (${res.status})`);
+          throw new Error(json?.error?.message || `Save failed (${res.status})`);
         }
 
         setSaveStatus("saved");
@@ -188,7 +189,9 @@ export default function StudioShell() {
     });
 
     const json = await res.json();
-    if (!json.ok) throw new Error(json.error);
+    if (!json.ok) throw new Error(json.error?.message ?? "Generation failed");
+
+    const generatedText = json.data.generation.text;
 
     const updatedNodes = graph.nodes.map((n) => {
       if (n.id !== selectedNode.id) return n;
@@ -203,7 +206,7 @@ export default function StudioShell() {
             ...(nodeData.generatedContent ?? {}),
             [nodeData.platform]: [
               ...existing,
-              { text: json.text, createdAt: new Date().toISOString() },
+              { text: generatedText, createdAt: json.data.generation.createdAt },
             ],
           },
         },
@@ -229,7 +232,7 @@ export default function StudioShell() {
     const node = graph.nodes.find((n) => n.id === nodeId);
     if (!node) return;
 
-    const nodeData = node.data as any;
+    const nodeData = node.data as ContentNodeData;
 
     const revision =
       preset === "shorter"
@@ -252,7 +255,9 @@ export default function StudioShell() {
     });
 
     const json = await res.json();
-    if (!json.ok) throw new Error(json.error);
+    if (!json.ok) throw new Error(json.error?.message ?? "Refine failed");
+
+    const refinedText = json.data.refinement.text;
 
     const updatedNodes = graph.nodes.map((n) => {
       if (n.id !== nodeId) return n;
@@ -267,7 +272,7 @@ export default function StudioShell() {
             ...nodeData.generatedContent,
             [platform]: [
               ...existing,
-              { text: json.text, createdAt: new Date().toISOString() },
+              { text: refinedText, createdAt: json.data.refinement.createdAt },
             ],
           },
         },

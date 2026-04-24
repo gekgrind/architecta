@@ -8,7 +8,7 @@ export async function getOnboardingSuggestions({
   context,
 }: {
   step: string;
-  context: Record<string, any>;
+  context: Record<string, unknown>;
 }) {
   const supabase = await createSupabaseServerClient();
   const {

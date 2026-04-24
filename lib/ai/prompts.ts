@@ -20,6 +20,16 @@ const CONTENT_HINTS: Record<ContentType, string[]> = {
     "Focus on insight, not promotion.",
   ],
 
+  linkedin_post: [
+    "Maintain a professional yet conversational tone.",
+    "Focus on insight, not promotion.",
+  ],
+
+  blog: [
+    "Write with clarity and authority.",
+    "Include actionable takeaways.",
+  ],
+
   blog_outline: [
     "Organize content into clear sections.",
     "Ensure logical progression of ideas.",
@@ -41,6 +51,11 @@ const CONTENT_HINTS: Record<ContentType, string[]> = {
   ],
 
   ad_copy: [
+    "Focus on benefits, not features.",
+    "Use compelling, action-oriented language.",
+  ],
+
+  ad: [
     "Focus on benefits, not features.",
     "Use compelling, action-oriented language.",
   ],

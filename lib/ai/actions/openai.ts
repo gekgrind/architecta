@@ -38,7 +38,7 @@ export async function generateWithOpenAI(prompt: string) {
     const text = response.choices[0]?.message?.content ?? "";
 
     return { ok: true, text };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("OpenAI error:", error);
 
     return {

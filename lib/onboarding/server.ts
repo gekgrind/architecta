@@ -1,76 +1,141 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server"; // your existing helper
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { OnboardingStepId } from "./steps";
 
+/**
+ * Canonical initializer for Architecta onboarding
+ * - Ensures ONE onboarding_sessions row
+ * - Ensures ONE brand_profiles row
+ * - NEVER returns nulls
+ * - NEVER relies on client timing
+ */
 export async function getOrCreateArchitectaOnboarding() {
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
 
-  // session
-  const { data: session } = await supabase
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    throw new Error("Not authenticated");
+  }
+
+  /* =====================================================
+     ONBOARDING SESSION (single source of truth for flow)
+  ====================================================== */
+
+  const { data: existingSession, error: sessionError } = await supabase
     .from("onboarding_sessions")
     .select("*")
     .eq("user_id", user.id)
     .eq("app", "architecta")
     .maybeSingle();
 
-  let finalSession = session;
+  if (sessionError) {
+    throw sessionError;
+  }
 
-  if (!finalSession) {
-    const { data: inserted, error } = await supabase
+  let session = existingSession;
+
+  if (!session) {
+    const { data: inserted, error: insertError } = await supabase
       .from("onboarding_sessions")
       .insert({
         user_id: user.id,
         app: "architecta",
         current_step: "welcome",
+        completed_steps: [],
+        flags: {},
+        status: "in_progress",
       })
       .select("*")
       .single();
-    if (error) throw error;
-    finalSession = inserted;
+
+    if (insertError) {
+      throw insertError;
+    }
+
+    session = inserted;
   }
 
-  // brand profile
-  const { data: profile } = await supabase
+  /* =====================================================
+     BRAND PROFILE (dependent but required)
+  ====================================================== */
+
+  const { data: existingProfile, error: profileError } = await supabase
     .from("brand_profiles")
     .select("*")
     .eq("user_id", user.id)
     .maybeSingle();
 
-  let finalProfile = profile;
-  if (!finalProfile) {
-    const { data: inserted, error } = await supabase
-      .from("brand_profiles")
-      .insert({ user_id: user.id })
-      .select("*")
-      .single();
-    if (error) throw error;
-    finalProfile = inserted;
+  if (profileError) {
+    throw profileError;
   }
 
-  return { user, session: finalSession, profile: finalProfile };
+  let profile = existingProfile;
+
+  if (!profile) {
+    const { data: inserted, error: insertError } = await supabase
+      .from("brand_profiles")
+      .insert({
+        user_id: user.id,
+      })
+      .select("*")
+      .single();
+
+    if (insertError) {
+      throw insertError;
+    }
+
+    profile = inserted;
+  }
+
+  return { user, session, profile };
 }
 
-export async function updateOnboardingStep(step: OnboardingStepId, complete?: boolean) {
+/**
+ * Advance or explicitly set onboarding step
+ * - Guarantees session exists
+ * - Appends to completed_steps safely
+ */
+export async function updateOnboardingStep(
+  step: OnboardingStepId,
+  markCompleted?: boolean
+) {
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
 
-  // fetch session
-  const { data: session, error } = await supabase
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    throw new Error("Not authenticated");
+  }
+
+  const { data: session, error: sessionError } = await supabase
     .from("onboarding_sessions")
     .select("*")
     .eq("user_id", user.id)
     .eq("app", "architecta")
     .single();
-  if (error) throw error;
 
-  const completed = Array.isArray(session.completed_steps) ? session.completed_steps : [];
-  const nextCompleted = complete && !completed.includes(step)
-    ? [...completed, step]
-    : completed;
+  if (sessionError || !session) {
+    throw sessionError ?? new Error("Onboarding session missing");
+  }
 
-  const { error: upErr } = await supabase
+  const completedSteps: OnboardingStepId[] = Array.isArray(
+    session.completed_steps
+  )
+    ? session.completed_steps
+    : [];
+
+  const nextCompleted =
+    markCompleted && !completedSteps.includes(step)
+      ? [...completedSteps, step]
+      : completedSteps;
+
+  const { error: updateError } = await supabase
     .from("onboarding_sessions")
     .update({
       current_step: step,
@@ -78,29 +143,89 @@ export async function updateOnboardingStep(step: OnboardingStepId, complete?: bo
     })
     .eq("id", session.id);
 
-  if (upErr) throw upErr;
+  if (updateError) {
+    throw updateError;
+  }
 }
 
-export async function setOnboardingFlag(flagKey: string, value: any) {
+/**
+ * Update arbitrary onboarding flags
+ * - Stored on onboarding_sessions.flags
+ * - Never overwrites existing flags
+ */
+export async function setOnboardingFlag(flagKey: string, value: unknown) {
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
 
-  const { data: session, error } = await supabase
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    throw new Error("Not authenticated");
+  }
+
+  const { data: session, error: sessionError } = await supabase
     .from("onboarding_sessions")
-    .select("*")
+    .select("id, flags")
     .eq("user_id", user.id)
     .eq("app", "architecta")
     .single();
-  if (error) throw error;
 
-  const flags = session.flags ?? {};
-  const nextFlags = { ...flags, [flagKey]: value };
+  if (sessionError || !session) {
+    throw sessionError ?? new Error("Onboarding session missing");
+  }
 
-  const { error: upErr } = await supabase
+  const nextFlags = {
+    ...(session.flags ?? {}),
+    [flagKey]: value,
+  };
+
+  const { error: updateError } = await supabase
     .from("onboarding_sessions")
     .update({ flags: nextFlags })
     .eq("id", session.id);
 
-  if (upErr) throw upErr;
+  if (updateError) {
+    throw updateError;
+  }
+}
+
+/**
+ * FINALIZE onboarding (authoritative)
+ * - Marks onboarding session completed
+ * - Updates profiles.onboarding_complete
+ * - Locks onboarding_step = "complete"
+ * - Safe to call multiple times
+ */
+export async function completeArchitectaOnboarding() {
+  const supabase = await createSupabaseServerClient();
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    throw new Error("Not authenticated");
+  }
+
+  // 1️⃣ Update onboarding session
+  await supabase
+    .from("onboarding_sessions")
+    .update({
+      current_step: "finish",
+      status: "completed",
+    })
+    .eq("user_id", user.id)
+    .eq("app", "architecta");
+
+  // 2️⃣ Update profile routing flags (SOURCE OF TRUTH)
+  await supabase
+    .from("profiles")
+    .update({
+      onboarding_complete: true,
+      onboarding_step: "complete",
+    })
+    .eq("id", user.id);
 }

@@ -1,16 +1,10 @@
-import { NextResponse } from "next/server";
-import { createOpenAiClient } from "@/lib/ai/llm/providers/openai";
-import { createAnthropicClient } from "@/lib/ai/llm/providers/anthropic";
 import { createLlmGateway } from "@/lib/ai/llm/gateway";
 import { withSystem, buildSystemPrompt } from "@/lib/ai/llm/prompts";
-import type { LlmGenerateInput } from "@/lib/ai/llm/types";
+import { createAnthropicClient } from "@/lib/ai/llm/providers/anthropic";
+import { createOpenAiClient } from "@/lib/ai/llm/providers/openai";
 import { getWorkspaceLlmPreference } from "@/lib/ai/llm/workspacePrefs";
-
-// TODO: Replace with your Supabase server client lookup
-async function getWorkspacePreference(workspaceId: string) {
-  // Example default:
-  return { preference: "auto" as const };
-}
+import { apiError, apiOk, parseJsonBody } from "@/lib/api/response";
+import type { LlmGenerateInput } from "@/lib/domain";
 
 const gateway = createLlmGateway({
   openai: createOpenAiClient(),
@@ -19,21 +13,22 @@ const gateway = createLlmGateway({
 });
 
 export async function POST(req: Request) {
-  const body = (await req.json()) as LlmGenerateInput;
+  const body = await parseJsonBody<LlmGenerateInput>(req);
 
-  const messages = withSystem(body.messages, buildSystemPrompt(body.task));
+  if (!body?.workspaceId || !body.task || !Array.isArray(body.messages)) {
+    return apiError("validation_error", "Invalid LLM generation request");
+  }
 
-  const result = await gateway.generate({
-    ...body,
-    messages,
-  });
+  try {
+    const messages = withSystem(body.messages, buildSystemPrompt(body.task));
+    const result = await gateway.generate({
+      ...body,
+      messages,
+    });
 
-  return NextResponse.json({
-    text: result.text,
-    provider: result.provider,
-    model: result.model,
-    usage: result.usage,
-    usedFallback: result.usedFallback ?? false,
-    latencyMs: result.latencyMs,
-  });
+    return apiOk({ result });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "LLM generation failed";
+    return apiError("upstream_error", message);
+  }
 }

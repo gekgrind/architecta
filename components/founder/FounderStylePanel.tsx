@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import FounderStyleEditor from "@/components/founder/FounderStyleEditor";
 
 type FounderProfile = {
-  profile_text: string;
-  confidence_score: number;
+  profileText: string;
+  confidenceScore: number;
   version: number;
 };
 
@@ -18,19 +18,22 @@ export default function FounderStylePanel({
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  async function loadProfile() {
+  const loadProfile = useCallback(async () => {
     setLoading(true);
     const res = await fetch(
       `/api/founder-style?workspaceId=${workspaceId ?? ""}`
     );
     const json = await res.json();
-    setProfile(json.profile ?? null);
+    setProfile(json.ok ? json.data.profile : null);
     setLoading(false);
-  }
+  }, [workspaceId]);
 
   useEffect(() => {
-    loadProfile();
-  }, [workspaceId]);
+    const frame = requestAnimationFrame(() => {
+      void loadProfile();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [loadProfile]);
 
   if (loading) {
     return (
@@ -54,7 +57,7 @@ export default function FounderStylePanel({
   if (editing) {
     return (
       <FounderStyleEditor
-        initialValue={profile.profile_text}
+        initialValue={profile.profileText}
         workspaceId={workspaceId}
         onDone={() => {
           setEditing(false);
@@ -77,11 +80,11 @@ export default function FounderStylePanel({
       </div>
 
       <pre className="whitespace-pre-wrap text-sm leading-relaxed">
-        {profile.profile_text}
+        {profile.profileText}
       </pre>
 
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>Confidence: {(profile.confidence_score * 100).toFixed(0)}%</span>
+        <span>Confidence: {(profile.confidenceScore * 100).toFixed(0)}%</span>
         <span>v{profile.version}</span>
       </div>
     </div>

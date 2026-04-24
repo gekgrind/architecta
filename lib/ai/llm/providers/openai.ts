@@ -1,5 +1,21 @@
 import type { LlmClient, LlmMessage, LlmResult } from "../types";
 
+type OpenAiCompletionResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string | null;
+    };
+  }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
+  error?: {
+    message?: string;
+  };
+};
+
 function toOpenAiMessages(messages: LlmMessage[]) {
   return messages.map((m) => ({ role: m.role, content: m.content }));
 }
@@ -28,11 +44,13 @@ export function createOpenAiClient(): LlmClient {
         }),
       });
 
-      const json = await res.json();
+      const json = (await res.json()) as OpenAiCompletionResponse;
 
       if (!res.ok) {
-        const err: any = new Error(json?.error?.message || "OpenAI error");
-        (err.status = res.status), (err.raw = json);
+        const err = Object.assign(new Error(json.error?.message || "OpenAI error"), {
+          status: res.status,
+          raw: json,
+        });
         throw err;
       }
 

@@ -1,6 +1,7 @@
 "use server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { ONBOARDING_STEPS } from "@/lib/onboarding/steps";
 import {
   getOrCreateArchitectaOnboarding,
   setOnboardingFlag,
@@ -8,7 +9,7 @@ import {
 } from "./server";
 
 /* =======================================================
-   Generic helpers (used by ALL onboarding steps)
+   Types
 ======================================================= */
 
 export type ArchitectaOnboardingStep =
@@ -24,22 +25,18 @@ export type ArchitectaOnboardingStep =
   | "review"
   | "finish";
 
-/**
- * Update arbitrary onboarding session fields
- * Safe to reuse across all steps
- */
-export async function updateArchitectaOnboarding(
-  data: Record<string, any>
-) {
+/* =======================================================
+   Generic helpers (used by ALL onboarding steps)
+======================================================= */
+
+export async function updateArchitectaOnboarding(data: Record<string, unknown>) {
   const supabase = await createSupabaseServerClient();
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    return { ok: false, error: "Not authenticated" };
-  }
+  if (!user) return { ok: false, error: "Not authenticated" };
 
   const { session } = await getOrCreateArchitectaOnboarding();
 
@@ -48,20 +45,46 @@ export async function updateArchitectaOnboarding(
     .update(data)
     .eq("id", session.id);
 
-  if (error) {
-    return { ok: false, error: error.message };
-  }
+  if (error) return { ok: false, error: error.message };
 
   return { ok: true };
 }
 
-/**
- * Explicitly set the current onboarding step
- */
-export async function setArchitectaOnboardingStep(
-  step: ArchitectaOnboardingStep
-) {
+export async function setArchitectaOnboardingStep(step: ArchitectaOnboardingStep) {
   return updateOnboardingStep(step, true);
+}
+
+/* =======================================================
+   Blueprint onboarding: Continue → persist → (client) navigate
+======================================================= */
+
+/**
+ * Use this for animated transitions:
+ * - persists next step
+ * - returns next URL (NO redirect here)
+ */
+export async function advanceArchitectaOnboardingStepClient(
+  currentStep: ArchitectaOnboardingStep
+) {
+  const supabase = await createSupabaseServerClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { ok: false, error: "Not authenticated" as const };
+
+  const currentIndex = ONBOARDING_STEPS.findIndex((s) => s.id === currentStep);
+
+  if (currentIndex === -1) {
+    return { ok: false, error: `Invalid onboarding step: ${currentStep}` as const };
+  }
+
+  const nextStep = (ONBOARDING_STEPS[currentIndex + 1]?.id ?? "finish") as ArchitectaOnboardingStep;
+
+  await updateOnboardingStep(nextStep, true);
+
+  return { ok: true as const, next: `/onboarding/${nextStep}`, nextStep };
 }
 
 /* =======================================================
@@ -75,24 +98,16 @@ export async function importFromProspra() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    return { ok: false, error: "Not authenticated" };
-  }
+  if (!user) return { ok: false, error: "Not authenticated" };
 
-  // ⚠️ Adjust table name if needed
   const { data: prospra, error } = await supabase
     .from("prospra_brand_profiles")
     .select("*")
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (error) {
-    return { ok: false, error: error.message };
-  }
-
-  if (!prospra) {
-    return { ok: false, error: "No Prospra data found." };
-  }
+  if (error) return { ok: false, error: error.message };
+  if (!prospra) return { ok: false, error: "No Prospra data found." };
 
   const { error: updateError } = await supabase
     .from("brand_profiles")
@@ -107,9 +122,7 @@ export async function importFromProspra() {
     })
     .eq("user_id", user.id);
 
-  if (updateError) {
-    return { ok: false, error: updateError.message };
-  }
+  if (updateError) return { ok: false, error: updateError.message };
 
   await setOnboardingFlag("usedProspra", true);
   await updateOnboardingStep("source", true);
@@ -128,9 +141,7 @@ export async function completeOnboarding() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    return { ok: false, error: "Not authenticated" };
-  }
+  if (!user) return { ok: false, error: "Not authenticated" };
 
   const { error } = await supabase
     .from("onboarding_sessions")
@@ -141,9 +152,7 @@ export async function completeOnboarding() {
     .eq("user_id", user.id)
     .eq("app", "architecta");
 
-  if (error) {
-    return { ok: false, error: error.message };
-  }
+  if (error) return { ok: false, error: error.message };
 
   return { ok: true, next: "/studio" };
 }

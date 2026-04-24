@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { setArchitectaOnboardingStep } from "@/lib/onboarding/actions";
 
 type ReviewStepProps = {
-  initialProfile: any;
+  initialProfile: Record<string, string | string[] | null | undefined>;
   initialSession: {
     id: string;
   };

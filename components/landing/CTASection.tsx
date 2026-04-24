@@ -1,11 +1,9 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { buildSharedSignupHref } from "@/lib/auth/redirects";
 import {
   ArrowRight,
   Play,
-  Sparkles,
-  CreditCard,
-  TrendingDown,
 } from "lucide-react";
 
 const CTASection = () => {
@@ -26,7 +24,7 @@ const CTASection = () => {
           </h2>
 
           <Button size="lg" asChild className="group">
-            <Link href="/auth/signup">
+            <Link href={buildSharedSignupHref()}>
               Start Creating for Free
               <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
             </Link>
@@ -41,7 +39,7 @@ const CTASection = () => {
 
           <div className="flex flex-col items-center gap-4 sm:flex-row justify-center">
             <Button size="lg" asChild className="group">
-              <Link href="/auth/signup">
+              <Link href={buildSharedSignupHref()}>
                 Start Creating for Free
                 <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
               </Link>

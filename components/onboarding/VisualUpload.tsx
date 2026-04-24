@@ -4,7 +4,12 @@ import { useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { registerUploadedAsset } from "@/lib/onboarding/actions-assets";
 
-export default function VisualUpload({ brandProfileId, userId }: any) {
+type VisualUploadProps = {
+  brandProfileId: string;
+  userId: string;
+};
+
+export default function VisualUpload({ brandProfileId, userId }: VisualUploadProps) {
   const supabase = createSupabaseBrowserClient();
   const [uploading, setUploading] = useState(false);
 

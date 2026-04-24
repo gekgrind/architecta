@@ -23,7 +23,7 @@ const ProblemSection = () => {
               <span className="text-sm font-medium text-destructive">The Reality</span>
             </div>
             <h2 className="font-display text-4xl md:text-5xl lg:text-6xl font-medium tracking-tight mb-6">
-              Marketing shouldn't feel{" "}
+              Marketing shouldn&apos;t feel{" "}
               <span className="text-gradient italic">this hard.</span>
             </h2>
           </div>
@@ -32,9 +32,9 @@ const ProblemSection = () => {
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
               <p className="text-xl text-foreground font-medium mb-6">
-                You're running a business—not a marketing department.
+                You&apos;re running a business - not a marketing department.
               </p>
-              <p className="text-muted-foreground mb-6">You're expected to:</p>
+              <p className="text-muted-foreground mb-6">You&apos;re expected to:</p>
               <ul className="space-y-3 mb-8">
                 {painPoints.map((point, index) => (
                   <li

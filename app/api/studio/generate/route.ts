@@ -1,69 +1,48 @@
-// app/api/studio/generate/route.ts
-import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { apiError, apiOk, parseJsonBody } from "@/lib/api/response";
+import { getAuthenticatedUser } from "@/lib/auth/server";
 import { getMemoryForGeneration } from "@/lib/ai/getMemoryForGeneration";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import type { GenerationRequest, GenerationResult } from "@/lib/domain";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-async function getSupabaseServer() {
-  const cookieStore = await cookies();
-
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-      },
-    }
-  );
-}
-
 export async function POST(req: Request) {
   try {
-    const supabase = await getSupabaseServer();
+    const supabase = await createSupabaseServiceClient();
+    const session = await getAuthenticatedUser(supabase);
+    if (!session) return apiError("unauthorized", "Unauthorized");
 
-    // 1) Auth
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const body = await parseJsonBody<GenerationRequest>(req);
+    const gen = body?.gen;
 
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!gen?.platform || !gen.idea) {
+      return apiError("validation_error", "Missing generation request");
     }
 
-    const userId = user.id;
+    const workspaceId = body?.workspaceId ?? null;
 
-    // 2) Payload
-    const body = await req.json();
-    const { workspaceId = null, brand, gen } = body;
-
-    // 3) Founder Style Profile
-    const { data: founderProfile } = await supabase
+    const { data: founderProfile, error: founderError } = await supabase
       .from("founder_style_profiles")
       .select("profile_text")
-      .eq("user_id", userId)
+      .eq("user_id", session.user.id)
       .eq("workspace_id", workspaceId)
       .order("version", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    // 4) Memory signals
+    if (founderError) return apiError("server_error", founderError.message);
+
     const memory = await getMemoryForGeneration({
-      userId,
+      userId: session.user.id,
       workspaceId,
       mode: "generate",
-      platform: gen?.platform,
-      idea: gen?.idea,
+      platform: gen.platform,
+      idea: gen.idea,
     });
 
-    // 5) Prompt
     const systemPrompt = `
-You are Architecta — an AI content architect for founders.
+You are Architecta - an AI content architect for founders.
 
 PRIORITY ORDER:
 1. User request
@@ -78,10 +57,10 @@ MEMORY SIGNALS:
 ${memory.summary}
 
 BRAND KIT:
-${JSON.stringify(brand ?? {}, null, 2)}
+${JSON.stringify(body?.brand ?? {}, null, 2)}
 
 GENERATION REQUEST:
-${JSON.stringify(gen ?? {}, null, 2)}
+${JSON.stringify(gen, null, 2)}
 
 Rules:
 - Do not mention memory or profiles
@@ -94,8 +73,9 @@ Rules:
       apiKey: process.env.OPENAI_API_KEY!,
     });
 
+    const model = "gpt-4.1-mini";
     const completion = await client.chat.completions.create({
-      model: "gpt-4.1-mini",
+      model,
       temperature: 0.7,
       messages: [
         { role: "system", content: systemPrompt },
@@ -103,13 +83,17 @@ Rules:
       ],
     });
 
-    const output = completion.choices[0]?.message?.content ?? "";
+    const text = completion.choices[0]?.message?.content ?? "";
+    const result: GenerationResult = {
+      text,
+      provider: "openai",
+      model,
+      createdAt: new Date().toISOString(),
+    };
 
-    return NextResponse.json({ ok: true, output });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message ?? "Generate failed" },
-      { status: 500 }
-    );
+    return apiOk({ generation: result });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Generate failed";
+    return apiError("server_error", message);
   }
 }

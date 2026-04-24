@@ -1,14 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import ReactFlow, { Background } from "reactflow";
+import ReactFlow, { Background, type Node } from "reactflow";
 import "reactflow/dist/style.css";
 
-import { StudioMode, GraphState } from "./studioTypes";
+import { StudioMode, GraphState, type GeneratedContentMap, type GeneratedVersion, type SelectedNode } from "./studioTypes";
 
 interface StudioCanvasProps {
   mode: StudioMode;
-  onSelectNode: (node: any | null) => void;
+  onSelectNode: (node: SelectedNode | null) => void;
   onGraphChange: (graph: GraphState) => void;
   onBackToBlueprint?: () => void;
   onRefine?: (
@@ -26,7 +26,7 @@ export default function StudioCanvas({
   onBackToBlueprint,
   onRefine,
 }: StudioCanvasProps) {
-  const [graph, setGraph] = useState<GraphState>({ nodes: [], edges: [] });
+  const [graph] = useState<GraphState>({ nodes: [], edges: [] });
 
   useEffect(() => {
     onGraphChange(graph);
@@ -34,7 +34,10 @@ export default function StudioCanvas({
 
   if (mode === "generate") {
     const contentNodes = graph.nodes.filter(
-      (n) => (n.data as any)?.generatedContent
+      (n) =>
+        typeof n.data === "object" &&
+        n.data !== null &&
+        "generatedContent" in n.data
     );
 
     return (
@@ -51,10 +54,10 @@ export default function StudioCanvas({
 
         <div className="flex-1 overflow-y-auto p-8 space-y-8">
           {contentNodes.map((node) => {
-            const generated = (node.data as any).generatedContent;
+            const generated = (node.data as { generatedContent?: GeneratedContentMap }).generatedContent ?? {};
 
             return Object.entries(generated).map(
-              ([platform, versions]: any) => (
+              ([platform, versions]) => (
                 <div
                   key={`${node.id}-${platform}`}
                   className="rounded-lg border border-white/10 bg-white/5 p-6 space-y-4"
@@ -64,13 +67,13 @@ export default function StudioCanvas({
                   </div>
 
                   <div className="flex gap-2 text-xs">
-                    <button onClick={() => onRefine?.(node.id, platform, versions.at(-1).text, "clearer")}>Clearer</button>
-                    <button onClick={() => onRefine?.(node.id, platform, versions.at(-1).text, "shorter")}>Shorter</button>
-                    <button onClick={() => onRefine?.(node.id, platform, versions.at(-1).text, "bolder")}>Bolder</button>
-                    <button onClick={() => onRefine?.(node.id, platform, versions.at(-1).text, "cta_stronger")}>CTA+</button>
+                    <button onClick={() => onRefine?.(node.id, platform, versions.at(-1)?.text ?? "", "clearer")}>Clearer</button>
+                    <button onClick={() => onRefine?.(node.id, platform, versions.at(-1)?.text ?? "", "shorter")}>Shorter</button>
+                    <button onClick={() => onRefine?.(node.id, platform, versions.at(-1)?.text ?? "", "bolder")}>Bolder</button>
+                    <button onClick={() => onRefine?.(node.id, platform, versions.at(-1)?.text ?? "", "cta_stronger")}>CTA+</button>
                   </div>
 
-                  {versions.map((v: any, i: number) => (
+                  {(versions as GeneratedVersion[]).map((v, i) => (
                     <pre
                       key={i}
                       className="whitespace-pre-wrap text-sm bg-black/30 p-3 rounded"
@@ -91,7 +94,7 @@ export default function StudioCanvas({
     <ReactFlow
       nodes={graph.nodes}
       edges={graph.edges}
-      onNodeClick={(_, node) => onSelectNode(node)}
+      onNodeClick={(_, node: Node) => onSelectNode({ id: node.id, data: node.data })}
       fitView
     >
       <Background gap={24} color="#1f2937" />

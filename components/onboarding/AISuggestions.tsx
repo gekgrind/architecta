@@ -5,7 +5,7 @@ import { getOnboardingSuggestions } from "@/lib/ai/onboardingSuggestions";
 
 type Props = {
   step: string;
-  context: Record<string, any>;
+  context: Record<string, unknown>;
   onApply?: (suggestion: string) => void;
 };
 

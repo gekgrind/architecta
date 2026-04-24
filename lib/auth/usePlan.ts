@@ -1,28 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useAuthIdentity } from "@/hooks/use-auth-identity";
 
 export function usePlan() {
-  const supabase = createSupabaseBrowserClient();
-  const [plan, setPlan] = useState<"free" | "pro">("free");
+  const { profile } = useAuthIdentity();
 
-  useEffect(() => {
-    async function loadPlan() {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) return;
-
-      const { data } = await supabase
-        .from("profiles")
-        .select("plan")
-        .eq("id", userData.user.id)
-        .single();
-
-      if (data?.plan === "pro") setPlan("pro");
-    }
-
-    loadPlan();
-  }, [supabase]);
-
-  return plan;
+  return profile?.plan === "pro" ? "pro" : "free";
 }

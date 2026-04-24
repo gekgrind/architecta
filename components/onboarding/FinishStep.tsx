@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { completeOnboarding } from "@/lib/onboarding/actions";
 
 const STATUS_MESSAGES = [
   "Finalizing your brand blueprint…",
@@ -15,6 +14,7 @@ export default function FinishStep() {
   const router = useRouter();
   const [messageIndex, setMessageIndex] = useState(0);
 
+  // Rotate status messages
   useEffect(() => {
     const interval = setInterval(() => {
       setMessageIndex((i) => (i + 1) % STATUS_MESSAGES.length);
@@ -23,16 +23,13 @@ export default function FinishStep() {
     return () => clearInterval(interval);
   }, []);
 
+  // Hand off to authoritative routing
   useEffect(() => {
-    async function runCompletion() {
-      const result = await completeOnboarding();
+    const timeout = setTimeout(() => {
+      router.replace("/dashboard");
+    }, 2200);
 
-      if (result?.ok && result.next) {
-        router.replace(result.next);
-      }
-    }
-
-    runCompletion();
+    return () => clearTimeout(timeout);
   }, [router]);
 
   return (

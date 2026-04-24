@@ -1,91 +1,130 @@
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { createServerClient } from "@supabase/ssr";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/studio", "/app"];
-const ONBOARDING_PATH = "/onboarding";
-const LOGIN_PATH = "/auth/login";
-const SIGNUP_PATH = "/auth/signup";
+import {
+  ACCESS_DENIED_PATH,
+  APP_HOME_PATH,
+  LOGIN_PATH,
+  ONBOARDING_PATH,
+  SIGNUP_PATH,
+  buildSharedLoginHref,
+  getPostAuthRedirectPath,
+} from "@/lib/auth/redirects";
+import { hasArchitectaAccess } from "@/lib/auth/profile";
+import {
+  getEcosystemCookieDomain,
+  getSupabaseProjectConfig,
+} from "@/lib/config/ecosystem";
+
+const PROTECTED_PREFIXES = [
+  "/analytics",
+  "/brand-kit",
+  "/campaigns",
+  "/dashboard",
+  "/generate",
+  "/library",
+  "/studio",
+  "/app",
+];
+
+function applySharedCookieOptions(
+  options: CookieOptions,
+  sharedCookieDomain?: string | null
+): CookieOptions {
+  return {
+    ...options,
+    ...(sharedCookieDomain ? { domain: sharedCookieDomain } : {}),
+  };
+}
 
 export async function middleware(req: NextRequest) {
+  const { url, anonKey } = getSupabaseProjectConfig();
+  const sharedCookieDomain = getEcosystemCookieDomain();
   const res = NextResponse.next();
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return req.cookies.get(name)?.value;
-        },
-        set(name: string, value: string, options: any) {
-          res.cookies.set({ name, value, ...options });
-        },
-        remove(name: string, options: any) {
-          res.cookies.set({ name, value: "", ...options });
-        },
+  const supabase = createServerClient(url, anonKey, {
+    cookies: {
+      get(name: string) {
+        return req.cookies.get(name)?.value;
       },
-    }
-  );
+      set(name: string, value: string, options: CookieOptions) {
+        res.cookies.set(
+          name,
+          value,
+          applySharedCookieOptions(options, sharedCookieDomain)
+        );
+      },
+      remove(name: string, options: CookieOptions) {
+        res.cookies.set(
+          name,
+          "",
+          applySharedCookieOptions(options, sharedCookieDomain)
+        );
+      },
+    },
+  });
 
-  // 🔐 Refresh session if needed
-  const { data } = await supabase.auth.getUser();
-  const user = data.user;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const pathname = req.nextUrl.pathname;
-
-  const isProtected = PROTECTED_PREFIXES.some((p) =>
-    pathname.startsWith(p)
+  const isProtected = PROTECTED_PREFIXES.some((prefix) =>
+    pathname === prefix || pathname.startsWith(`${prefix}/`)
   );
-
-  const isAuthPage =
-    pathname === LOGIN_PATH || pathname === SIGNUP_PATH;
-
+  const isAuthPage = pathname === LOGIN_PATH || pathname === SIGNUP_PATH;
   const isOnboarding =
-    pathname === ONBOARDING_PATH || pathname.startsWith(`${ONBOARDING_PATH}/`);
-
-  /* ---------------------------------------------------------
-     1️⃣ AUTH GUARD (your existing logic, unchanged)
-  --------------------------------------------------------- */
+    pathname === ONBOARDING_PATH ||
+    pathname.startsWith(`${ONBOARDING_PATH}/`);
 
   if (isProtected && !user) {
-    const url = req.nextUrl.clone();
-    url.pathname = LOGIN_PATH;
-    url.searchParams.set("next", pathname);
-    return NextResponse.redirect(url);
+    const nextPath = `${req.nextUrl.pathname}${req.nextUrl.search}`;
+    return NextResponse.redirect(new URL(buildSharedLoginHref(nextPath), req.url));
+  }
+
+  let onboardingComplete = false;
+  let hasAccess = true;
+
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    onboardingComplete = Boolean(profile?.onboarding_complete);
+    hasAccess = hasArchitectaAccess(profile ?? undefined);
   }
 
   if (isAuthPage && user) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
+    const redirectPath = getPostAuthRedirectPath(
+      onboardingComplete,
+      req.nextUrl.searchParams.get("next")
+    );
+
+    return NextResponse.redirect(new URL(redirectPath, req.url));
   }
 
-  /* ---------------------------------------------------------
-     2️⃣ ARCHITECTA ONBOARDING GUARD
-     - Applies ONLY to authenticated users
-     - Applies ONLY to Architecta areas
-     - Does NOT run on onboarding routes
-  --------------------------------------------------------- */
+  if (user && !hasAccess && isProtected) {
+    return NextResponse.redirect(new URL(ACCESS_DENIED_PATH, req.url));
+  }
+
+  if (user && onboardingComplete && isOnboarding) {
+    return NextResponse.redirect(new URL(APP_HOME_PATH, req.url));
+  }
 
   const isArchitectaArea =
+    pathname.startsWith("/analytics") ||
+    pathname.startsWith("/brand-kit") ||
+    pathname.startsWith("/campaigns") ||
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/generate") ||
+    pathname.startsWith("/library") ||
     pathname.startsWith("/studio") ||
     pathname.startsWith("/app/architecta");
 
-  if (user && isArchitectaArea && !isOnboarding) {
-    // Check onboarding status
-    const { data: session, error } = await supabase
-      .from("onboarding_sessions")
-      .select("status")
-      .eq("user_id", user.id)
-      .eq("app", "architecta")
-      .maybeSingle();
-
-    // If no session OR not completed → force onboarding
-    if (!session || session.status !== "completed") {
-      const url = req.nextUrl.clone();
-      url.pathname = ONBOARDING_PATH;
-      return NextResponse.redirect(url);
-    }
+  if (user && isArchitectaArea && !isOnboarding && !onboardingComplete) {
+    return NextResponse.redirect(new URL(ONBOARDING_PATH, req.url));
   }
 
   return res;
@@ -93,12 +132,6 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-      run middleware on all pages except:
-      - next static assets
-      - images
-      - favicon
-    */
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
   ],
 };

@@ -1,13 +1,11 @@
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+import { APP_HOME_PATH } from "@/lib/auth/redirects";
+import { requireAuthenticatedUser } from "@/lib/auth/requireAuthenticatedUser";
 import { getOrCreateArchitectaOnboarding } from "@/lib/onboarding/server";
 
 const TOTAL_STEPS = 11;
 
-/**
- * Map onboarding steps to an index
- * Keep this dumb + explicit on purpose
- */
 function getStepIndex(step: string | null) {
   switch (step) {
     case "welcome":
@@ -42,37 +40,19 @@ export default async function OnboardingLayout({
 }: {
   children: React.ReactNode;
 }) {
-  /**
-   * 1️⃣ AUTH GATE FIRST
-   * Never call onboarding logic until auth is confirmed
-   */
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  await requireAuthenticatedUser("/onboarding");
 
-  if (!user) {
-    redirect("/auth/login");
-  }
-
-  /**
-   * 2️⃣ SAFE TO TOUCH ONBOARDING NOW
-   */
   const { session } = await getOrCreateArchitectaOnboarding();
 
-  // Hard stop if onboarding is done
   if (session.status === "completed") {
-    redirect("/dashboard");
+    redirect(APP_HOME_PATH);
   }
 
   const currentStep = getStepIndex(session.current_step ?? "welcome");
-  const progressPercent = Math.round(
-    (currentStep / TOTAL_STEPS) * 100
-  );
+  const progressPercent = Math.round((currentStep / TOTAL_STEPS) * 100);
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col">
-      {/* Progress Bar */}
       <div className="w-full h-1 bg-slate-800">
         <div
           className="h-full bg-indigo-500 transition-all duration-500 ease-out"
@@ -80,7 +60,6 @@ export default async function OnboardingLayout({
         />
       </div>
 
-      {/* Content */}
       <main className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-xl">
           {children}

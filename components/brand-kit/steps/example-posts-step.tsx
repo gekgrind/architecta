@@ -101,11 +101,11 @@ export function ExamplePostsStep({ formData, updateFormData }: ExamplePostsStepP
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label>Content</Label>
-                    <CharacterCounter current={post.content.length} max={500} />
+                    <CharacterCounter current={post.content?.length ?? 0} max={500} />
                   </div>
                   <Textarea
                     placeholder="Paste or write your example content..."
-                    value={post.content}
+                    value={post.content ?? ""}
                     onChange={(e) => {
                       if (e.target.value.length <= 500) {
                         updateExample(post.id, "content", e.target.value)
@@ -118,11 +118,11 @@ export function ExamplePostsStep({ formData, updateFormData }: ExamplePostsStepP
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label>Why it works</Label>
-                    <CharacterCounter current={post.whyItWorks.length} max={150} />
+                    <CharacterCounter current={post.whyItWorks?.length ?? 0} max={150} />
                   </div>
                   <Textarea
                     placeholder="Explain what makes this content effective..."
-                    value={post.whyItWorks}
+                    value={post.whyItWorks ?? ""}
                     onChange={(e) => {
                       if (e.target.value.length <= 150) {
                         updateExample(post.id, "whyItWorks", e.target.value)

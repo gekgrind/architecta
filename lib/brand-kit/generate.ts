@@ -1,9 +1,20 @@
 import { runAI } from "@/lib/ai/router";
 
+type BrandProfileForGeneration = {
+  ai_preferences?: {
+    preferClaude?: boolean;
+  } | null;
+  brand_name?: string | null;
+  offers?: string | null;
+  typical_customers?: string | null;
+  mission?: string | null;
+  vision?: string | null;
+};
+
 export async function generateBrandKit({
   brandProfile,
 }: {
-  brandProfile: any;
+  brandProfile: BrandProfileForGeneration;
 }) {
   const preferClaude = brandProfile.ai_preferences?.preferClaude;
 

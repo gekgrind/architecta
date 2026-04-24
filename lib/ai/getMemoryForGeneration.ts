@@ -12,9 +12,15 @@ interface GetMemoryArgs {
   idea?: string;
 }
 
+interface MemoryEvent {
+  summary?: string | null;
+  text?: string | null;
+  [key: string]: unknown;
+}
+
 interface MemoryResult {
   summary: string;
-  items: any[];
+  items: MemoryEvent[];
 }
 
 async function getSupabaseServer() {
@@ -39,15 +45,14 @@ async function getSupabaseServer() {
 export async function getMemoryForGeneration(
   args: GetMemoryArgs
 ): Promise<MemoryResult> {
-  const {
-    userId,
-    workspaceId = null,
-    mode,
-    platform,
-    idea,
-  } = args;
+  const { userId, workspaceId = null, mode, platform, idea } = args;
 
   const supabase = await getSupabaseServer();
+
+  // Prevent unused-var lint drama for future expansion hooks
+  void mode;
+  void platform;
+  void idea;
 
   // Fetch recent memory events
   const { data: events } = await supabase
@@ -58,7 +63,9 @@ export async function getMemoryForGeneration(
     .order("created_at", { ascending: false })
     .limit(20);
 
-  if (!events || events.length === 0) {
+  const memoryEvents: MemoryEvent[] = (events ?? []) as MemoryEvent[];
+
+  if (memoryEvents.length === 0) {
     return {
       summary: "No relevant memory signals yet.",
       items: [],
@@ -66,16 +73,19 @@ export async function getMemoryForGeneration(
   }
 
   // Simple summarization logic (human-readable)
-  const summaries = events.map((event: any) => {
-    if (event.summary) return `- ${event.summary}`;
-    if (event.text) return `- ${event.text}`;
-    return null;
-  });
-
-  const filtered = summaries.filter(Boolean);
+  const summaries = memoryEvents
+    .map((event) => {
+      if (event.summary) return `- ${event.summary}`;
+      if (event.text) return `- ${event.text}`;
+      return null;
+    })
+    .filter((value): value is string => value !== null);
 
   return {
-    summary: filtered.join("\n"),
-    items: events,
+    summary:
+      summaries.length > 0
+        ? summaries.join("\n")
+        : "No relevant memory signals yet.",
+    items: memoryEvents,
   };
 }

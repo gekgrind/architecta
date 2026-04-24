@@ -1,18 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { MetricCard } from "@/components/ui/metric-card";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { ContentTypeIcon } from "@/components/ui/content-type-icon";
-
-import { mockContentItems } from "@/lib/mock-data";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-
+import Link from "next/link";
 import {
   Sparkles,
   FileText,
@@ -21,43 +9,19 @@ import {
   ArrowRight,
 } from "lucide-react";
 
-import Link from "next/link";
+import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ContentTypeIcon } from "@/components/ui/content-type-icon";
+import { MetricCard } from "@/components/ui/metric-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { useAuthIdentity } from "@/hooks/use-auth-identity";
+import { mockContentItems } from "@/lib/mock-data";
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const supabase = createSupabaseBrowserClient();
-
-  const [userName, setUserName] = useState<string>("there");
-  const [loading, setLoading] = useState(true);
-
+  const { loading, displayName } = useAuthIdentity();
   const recentContent = mockContentItems.slice(0, 4);
 
-  useEffect(() => {
-    async function loadUser() {
-      const { data, error } = await supabase.auth.getUser();
-
-      if (error || !data.user) {
-        router.replace("/auth/login");
-        return;
-      }
-
-      const user = data.user;
-
-      // Prefer name from OAuth metadata, fallback to email
-      const name =
-        user.user_metadata?.full_name ||
-        user.user_metadata?.name ||
-        user.email?.split("@")[0] ||
-        "there";
-
-      setUserName(name);
-      setLoading(false);
-    }
-
-    loadUser();
-  }, [router, supabase]);
-
-  // Prevent UI flash before auth resolves
   if (loading) {
     return null;
   }
@@ -65,11 +29,10 @@ export default function DashboardPage() {
   return (
     <DashboardLayout breadcrumbs={[{ label: "Dashboard" }]}>
       <div className="space-y-8">
-        {/* Welcome Section */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">
-              Welcome back, {userName}
+              Welcome back, {displayName}
             </h1>
             <p className="text-muted-foreground">
               Here&apos;s what&apos;s happening with your content
@@ -84,7 +47,6 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        {/* Metrics */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <MetricCard
             label="Total Content"
@@ -108,7 +70,6 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* Quick Actions */}
         <div className="grid gap-4 md:grid-cols-3">
           <Link href="/generate">
             <Card className="group cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
@@ -166,7 +127,6 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        {/* Recent Content */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-lg">Recent Content</CardTitle>

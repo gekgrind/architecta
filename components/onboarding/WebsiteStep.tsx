@@ -2,9 +2,21 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { saveWebsiteStep } from "@/lib/onboarding/actions";
+import { updateArchitectaOnboarding, advanceArchitectaOnboardingStepClient } from "@/lib/onboarding/actions";
 
-export default function WebsiteStep({ initialProfile, initialSession }: any) {
+type WebsiteStepProps = {
+  initialProfile: {
+    has_website?: boolean | null;
+    website_url?: string | null;
+  };
+  initialSession: {
+    flags?: {
+      hasWebsite?: boolean | null;
+    } | null;
+  };
+};
+
+export default function WebsiteStep({ initialProfile, initialSession }: WebsiteStepProps) {
   const router = useRouter();
   const [hasWebsite, setHasWebsite] = useState<boolean | null>(
     initialProfile.has_website ?? initialSession.flags?.hasWebsite ?? null
@@ -16,14 +28,28 @@ export default function WebsiteStep({ initialProfile, initialSession }: any) {
   async function onContinue() {
     setLoading(true);
     setError(null);
-    const res = await saveWebsiteStep({ hasWebsite, websiteUrl });
+
+    const updateRes = await updateArchitectaOnboarding({
+      has_website: hasWebsite,
+      website_url: websiteUrl
+    });
+
+    if (!updateRes.ok) {
+      setError(updateRes.error ?? "Something went wrong");
+      setLoading(false);
+      return;
+    }
+
+    const res = await advanceArchitectaOnboardingStepClient("website");
     setLoading(false);
 
     if (!res.ok) {
       setError(res.error ?? "Something went wrong");
       return;
     }
-    router.push(res.next);
+    if (res.next) {
+      router.push(res.next);
+    }
   }
 
   return (

@@ -1,9 +1,4 @@
-import type { LlmProvider, QualityTier, TaskType } from "./types";
-
-export type ModelChoice = {
-  provider: LlmProvider;
-  model: string;
-};
+import type { ModelChoice, QualityTier, TaskType } from "./types";
 
 type TaskRoute = {
   draft: ModelChoice;

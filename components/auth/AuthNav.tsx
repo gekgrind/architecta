@@ -1,89 +1,53 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+import { useAuthIdentity } from "@/hooks/use-auth-identity";
+import {
+  buildSharedLoginHref,
+  buildSharedSignupHref,
+} from "@/lib/auth/redirects";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
-type AuthUser = {
-  name: string;
-  email: string;
-  avatarUrl?: string;
-};
+import { Button } from "@/components/ui/button";
 
 export function AuthNav() {
   const supabase = createSupabaseBrowserClient();
-  const router = useRouter();
-
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function loadUser() {
-      const { data } = await supabase.auth.getUser();
-
-      if (!data.user) {
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-
-      const u = data.user;
-
-      setUser({
-        name:
-          u.user_metadata?.full_name ||
-          u.user_metadata?.name ||
-          u.email?.split("@")[0] ||
-          "User",
-        email: u.email ?? "",
-        avatarUrl: u.user_metadata?.avatar_url,
-      });
-
-      setLoading(false);
-    }
-
-    loadUser();
-  }, [supabase]);
+  const { loading, isAuthenticated, displayName, avatarUrl } = useAuthIdentity();
 
   async function handleLogout() {
     await supabase.auth.signOut();
-    router.push("/auth/login");
+    window.location.assign(buildSharedLoginHref());
   }
 
   if (loading) return null;
 
-  // Logged out
-  if (!user) {
+  if (!isAuthenticated) {
     return (
       <div className="flex items-center gap-2">
         <Button asChild variant="ghost">
-          <Link href="/auth/login">Sign in</Link>
+          <Link href={buildSharedLoginHref()}>Sign in</Link>
         </Button>
 
         <Button asChild>
-          <Link href="/auth/signup">Start free</Link>
+          <Link href={buildSharedSignupHref()}>Start free</Link>
         </Button>
       </div>
     );
   }
 
-  // Logged in
   return (
     <div className="flex items-center gap-3">
       <Avatar className="h-8 w-8">
-        <AvatarImage src={user.avatarUrl} />
+        <AvatarImage src={avatarUrl} />
         <AvatarFallback>
-          {user.name.slice(0, 1).toUpperCase()}
+          {displayName.slice(0, 1).toUpperCase()}
         </AvatarFallback>
       </Avatar>
 
-      <span className="text-sm font-medium">{user.name}</span>
+      <span className="text-sm font-medium">{displayName}</span>
 
-      <Button variant="ghost" size="sm" onClick={handleLogout}>
+      <Button variant="ghost" size="sm" onClick={() => void handleLogout()}>
         Log out
       </Button>
     </div>

@@ -1,4 +1,4 @@
-// lib/types.ts
+// lib/ai/prompts/types.ts
 
 /**
  * ============================
@@ -8,15 +8,13 @@
  * Keep these in sync with UI conditionals and generation logic.
  */
 
-export const CONTENT_TYPES = [
-  "tweet",
-  "linkedin",
-  "plain",
-  "blog",
-  "email",
-] as const;
-
-export type ContentType = (typeof CONTENT_TYPES)[number];
+export type Platform =
+  | "x_post"
+  | "x_thread"
+  | "linkedin_post"
+  | "marketing_email"
+  | "blog_outline"
+  | "ad_angles";
 
 /**
  * ============================
@@ -24,11 +22,10 @@ export type ContentType = (typeof CONTENT_TYPES)[number];
  * ============================
  */
 
-export type GenerationStatus =
-  | "idle"
-  | "generating"
-  | "success"
-  | "error";
+export type ChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
 
 /**
  * ============================
@@ -37,7 +34,7 @@ export type GenerationStatus =
  */
 
 export interface BrandKit {
-  name: string;
+  brandName: string;
   audience?: string;
   tone?: string;
   topics?: string[];
@@ -52,38 +49,35 @@ export interface BrandKit {
  * Used for saved drafts, previews, and libraries
  */
 
-export interface ContentItem {
-  id: string;
-  type: ContentType;
-  content: string;
-  createdAt: string;
-  updatedAt?: string;
-  brandId?: string;
-}
+export type RevisionControls = {
+  tone?: "clearer" | "bolder" | "same";
+  length?: "shorter" | "same" | "longer";
+  ctaStrength?: "subtle" | "same" | "stronger";
+  complexity?: "simpler" | "same" | "deeper";
+};
 
-/**
- * ============================
- * Generation Options
- * ============================
- */
+export type GenerationControls = {
+  platform: Platform;
+  idea: string;
+  goal?: string;
+  context?: string;
+  email?: {
+    fromName?: string;
+    fromBrand?: string;
+    primaryCta?: string;
+  };
+};
 
-export interface GenerationOptions {
-  contentType: ContentType;
-  prompt?: string;
-  tone?: string;
-  length?: "short" | "medium" | "long";
-  callToAction?: boolean;
-}
+export type PromptBuildOptions = {
+  brand: BrandKit;
+  gen: GenerationControls;
+  revision?: RevisionControls;
+  strictNoEmojis?: boolean;
+  allowHashtags?: boolean;
+};
 
-/**
- * ============================
- * API Responses
- * ============================
- */
-
-export interface GenerationResponse {
-  content: string;
-  contentType: ContentType;
-  status: GenerationStatus;
-  error?: string;
-}
+export type BuiltPrompt = {
+  modelHint?: string;
+  messages: ChatMessage[];
+  metadata?: Record<string, string | number | boolean | null>;
+};
