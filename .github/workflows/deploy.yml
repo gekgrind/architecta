@@ -23,7 +23,7 @@ jobs:
             cd ${{ secrets.SERVER_PATH }}
 
             git pull origin main
-            npm install
+            npm ci
             npm run build
             pm2 restart ${{ secrets.PM2_APP_NAME }}
             pm2 save
