@@ -157,7 +157,7 @@ export default function DashboardPage() {
                     View Library
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    Browse all your content
+                    Browse all your content 2
                   </p>
                 </div>
                 <ArrowRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1" />
