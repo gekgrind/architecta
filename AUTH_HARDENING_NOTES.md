@@ -37,6 +37,7 @@ Patterns checked:
   - `lib/auth/redirects.ts`
   - `lib/config/ecosystem.ts`
 - Server auth/session helpers:
+  - `lib/supabase/cookies.ts`
   - `lib/supabase/server.ts`
   - `lib/auth/server.ts`
   - `lib/auth/requireAuthenticatedUser.ts`
@@ -56,6 +57,7 @@ Patterns checked:
   - falls back safely to `/` if the generated shared login target would loop back to the current Architecta host.
 - Hardened shared auth URL generation in `lib/auth/redirects.ts` so missing or self-referential `NEXT_PUBLIC_APP_URL` values fail closed to `/` instead of creating a bad auth redirect target.
 - Updated shared login `next` handling so protected Architecta routes send a full safe Architecta return URL, preserving query strings while rejecting off-domain return targets.
+- Centralized Supabase SSR cookie options so middleware, server helpers, and browser helpers all use `entrepreneuria-auth-token` with the shared Entrepreneuria cookie attributes.
 - Removed the redundant client-side dashboard auth redirect from `app/dashboard/page.tsx`; middleware remains the route protection owner for `/dashboard`.
 - Replaced low-risk direct client `auth.getUser()` usage in `components/blueprint/BlueprintCanvas.tsx` and `lib/auth/usePlan.ts` with the shared identity hook.
 

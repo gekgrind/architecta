@@ -1,4 +1,4 @@
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 import {
@@ -11,10 +11,8 @@ import {
   getPostAuthRedirectPath,
 } from "@/lib/auth/redirects";
 import { hasArchitectaAccess } from "@/lib/auth/profile";
-import {
-  getEcosystemCookieDomain,
-  getSupabaseProjectConfig,
-} from "@/lib/config/ecosystem";
+import { getSupabaseProjectConfig } from "@/lib/config/ecosystem";
+import { getSharedSupabaseCookieOptions } from "@/lib/supabase/cookies";
 
 const PROTECTED_PREFIXES = [
   "/analytics",
@@ -27,39 +25,24 @@ const PROTECTED_PREFIXES = [
   "/app",
 ];
 
-function applySharedCookieOptions(
-  options: CookieOptions,
-  sharedCookieDomain?: string | null
-): CookieOptions {
-  return {
-    ...options,
-    ...(sharedCookieDomain ? { domain: sharedCookieDomain } : {}),
-  };
-}
-
 export async function middleware(req: NextRequest) {
   const { url, anonKey } = getSupabaseProjectConfig();
-  const sharedCookieDomain = getEcosystemCookieDomain();
+  const sharedCookieOptions = getSharedSupabaseCookieOptions();
   const res = NextResponse.next();
 
   const supabase = createServerClient(url, anonKey, {
+    cookieOptions: sharedCookieOptions,
     cookies: {
-      get(name: string) {
-        return req.cookies.get(name)?.value;
+      getAll() {
+        return req.cookies.getAll();
       },
-      set(name: string, value: string, options: CookieOptions) {
-        res.cookies.set(
-          name,
-          value,
-          applySharedCookieOptions(options, sharedCookieDomain)
-        );
-      },
-      remove(name: string, options: CookieOptions) {
-        res.cookies.set(
-          name,
-          "",
-          applySharedCookieOptions(options, sharedCookieDomain)
-        );
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value, options }) => {
+          res.cookies.set(name, value, {
+            ...options,
+            ...sharedCookieOptions,
+          });
+        });
       },
     },
   });
