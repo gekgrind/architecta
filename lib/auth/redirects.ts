@@ -25,6 +25,74 @@ export function sanitizeAuthRedirectPath(nextPath?: string | null) {
   return nextPath;
 }
 
+function buildArchitectaAppHref(nextPath: string) {
+  const appUrl = getEcosystemAppUrl("architecta");
+
+  if (!appUrl) {
+    return undefined;
+  }
+
+  try {
+    return new URL(sanitizeAuthRedirectPath(nextPath), appUrl).toString();
+  } catch {
+    return undefined;
+  }
+}
+
+export function sanitizeSharedAuthNextUrl(nextTarget?: string | null) {
+  const fallbackHref = buildArchitectaAppHref(APP_HOME_PATH);
+
+  if (!nextTarget) {
+    return fallbackHref;
+  }
+
+  if (nextTarget.startsWith("/")) {
+    return buildArchitectaAppHref(nextTarget) ?? fallbackHref;
+  }
+
+  try {
+    const candidate = new URL(nextTarget);
+    const architectaOrigin = getUrlOrigin(getEcosystemAppUrl("architecta"));
+
+    if (
+      !architectaOrigin ||
+      candidate.origin !== architectaOrigin ||
+      (candidate.protocol !== "http:" && candidate.protocol !== "https:")
+    ) {
+      return fallbackHref;
+    }
+
+    return candidate.toString();
+  } catch {
+    return fallbackHref;
+  }
+}
+
+export function sanitizePostAuthRedirectPath(nextTarget?: string | null) {
+  if (!nextTarget) {
+    return APP_HOME_PATH;
+  }
+
+  if (nextTarget.startsWith("/")) {
+    return sanitizeAuthRedirectPath(nextTarget);
+  }
+
+  try {
+    const candidate = new URL(nextTarget);
+    const architectaOrigin = getUrlOrigin(getEcosystemAppUrl("architecta"));
+
+    if (architectaOrigin && candidate.origin === architectaOrigin) {
+      return sanitizeAuthRedirectPath(
+        `${candidate.pathname}${candidate.search}${candidate.hash}`
+      );
+    }
+  } catch {
+    return APP_HOME_PATH;
+  }
+
+  return APP_HOME_PATH;
+}
+
 function buildPathWithQuery(
   path: string,
   params?: Record<string, SearchParamValue>
@@ -39,10 +107,14 @@ function buildPathWithQuery(
         continue;
       }
 
-      searchParams.set(
-        key,
-        key === "next" ? sanitizeAuthRedirectPath(value) : value
-      );
+      const sanitizedValue =
+        key === "next" ? sanitizeSharedAuthNextUrl(value) : value;
+
+      if (!sanitizedValue) {
+        continue;
+      }
+
+      searchParams.set(key, sanitizedValue);
     }
   }
 
@@ -91,19 +163,19 @@ export function hasSharedAuthLoopRisk(currentUrl: string | URL, targetHref: stri
 
 export function buildSharedLoginHref(nextPath?: string | null) {
   return buildSharedAuthHref(SHARED_LOGIN_PATH, {
-    next: sanitizeAuthRedirectPath(nextPath),
+    next: sanitizeSharedAuthNextUrl(nextPath),
   });
 }
 
 export function buildSharedSignupHref(nextPath?: string | null) {
   return buildSharedAuthHref(SHARED_SIGNUP_PATH, {
-    next: sanitizeAuthRedirectPath(nextPath),
+    next: sanitizeSharedAuthNextUrl(nextPath),
   });
 }
 
 export function buildSharedVerifyEmailHref(nextPath?: string | null) {
   return buildSharedAuthHref(SHARED_VERIFY_EMAIL_PATH, {
-    next: sanitizeAuthRedirectPath(nextPath),
+    next: sanitizeSharedAuthNextUrl(nextPath),
   });
 }
 
@@ -115,7 +187,7 @@ export function getPostAuthRedirectPath(
     return ONBOARDING_PATH;
   }
 
-  const safeNextPath = sanitizeAuthRedirectPath(nextPath);
+  const safeNextPath = sanitizePostAuthRedirectPath(nextPath);
 
   if (
     safeNextPath.startsWith("/auth") ||

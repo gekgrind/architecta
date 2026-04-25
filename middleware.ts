@@ -78,7 +78,7 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith(`${ONBOARDING_PATH}/`);
 
   if (isProtected && !user) {
-    const nextPath = `${req.nextUrl.pathname}${req.nextUrl.search}`;
+    const nextPath = req.nextUrl.toString();
     return NextResponse.redirect(new URL(buildSharedLoginHref(nextPath), req.url));
   }
 

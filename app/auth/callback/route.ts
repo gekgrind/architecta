@@ -4,13 +4,14 @@ import {
   buildSharedLoginHref,
   getPostAuthRedirectPath,
   hasSharedAuthLoopRisk,
-  sanitizeAuthRedirectPath,
+  sanitizePostAuthRedirectPath,
 } from "@/lib/auth/redirects";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const nextPath = sanitizeAuthRedirectPath(url.searchParams.get("next"));
+  const nextTarget = url.searchParams.get("next");
+  const nextPath = sanitizePostAuthRedirectPath(nextTarget);
   const supabase = await createSupabaseServerClient();
 
   const {
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    const loginHref = buildSharedLoginHref(nextPath);
+    const loginHref = buildSharedLoginHref(nextTarget ?? nextPath);
 
     if (hasSharedAuthLoopRisk(url, loginHref)) {
       return NextResponse.redirect(new URL("/", request.url));
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
 
   const redirectPath = getPostAuthRedirectPath(
     Boolean(profile?.onboarding_complete),
-    nextPath
+    nextTarget ?? nextPath
   );
 
   return NextResponse.redirect(new URL(redirectPath, request.url));

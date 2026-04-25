@@ -17,6 +17,14 @@ Patterns checked:
 - `/auth/signup`
 - `/auth/callback`
 - `NEXT_PUBLIC_APP_URL`
+- `NEXT_PUBLIC_ARCHITECTA_APP_URL`
+- `NEXT_PUBLIC_ENTREPRENEURIA_COOKIE_DOMAIN`
+
+## Required shared auth environment
+
+- `NEXT_PUBLIC_APP_URL=https://entrepreneuria.io`
+- `NEXT_PUBLIC_ARCHITECTA_APP_URL=https://architecta.entrepreneuria.io`
+- `NEXT_PUBLIC_ENTREPRENEURIA_COOKIE_DOMAIN=.entrepreneuria.io`
 
 ## Active auth paths that remain
 
@@ -47,6 +55,7 @@ Patterns checked:
   - redirects unauthenticated users back into shared login,
   - falls back safely to `/` if the generated shared login target would loop back to the current Architecta host.
 - Hardened shared auth URL generation in `lib/auth/redirects.ts` so missing or self-referential `NEXT_PUBLIC_APP_URL` values fail closed to `/` instead of creating a bad auth redirect target.
+- Updated shared login `next` handling so protected Architecta routes send a full safe Architecta return URL, preserving query strings while rejecting off-domain return targets.
 - Removed the redundant client-side dashboard auth redirect from `app/dashboard/page.tsx`; middleware remains the route protection owner for `/dashboard`.
 - Replaced low-risk direct client `auth.getUser()` usage in `components/blueprint/BlueprintCanvas.tsx` and `lib/auth/usePlan.ts` with the shared identity hook.
 
@@ -64,6 +73,7 @@ Patterns checked:
 ## Manual verification steps
 
 1. Visit a protected Architecta route while signed out and verify redirect goes to the shared Entrepreneuria login flow.
+   Expected shape: `https://entrepreneuria.io/login?next=https%3A%2F%2Farchitecta.entrepreneuria.io%2F...`
 2. Complete shared login and verify return to:
    - `/dashboard` when onboarding is complete
    - `/onboarding` when onboarding is incomplete

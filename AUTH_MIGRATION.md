@@ -34,6 +34,10 @@
 
 ## Shared auth assumptions
 
+- Required shared auth env vars:
+  - `NEXT_PUBLIC_APP_URL=https://entrepreneuria.io`
+  - `NEXT_PUBLIC_ARCHITECTA_APP_URL=https://architecta.entrepreneuria.io`
+  - `NEXT_PUBLIC_ENTREPRENEURIA_COOKIE_DOMAIN=.entrepreneuria.io`
 - Architecta consumes the shared Entrepreneuria Supabase project and shared cookie domain.
 - Canonical credential-entry pages live on `NEXT_PUBLIC_APP_URL` at `/login`, `/sign-up`, and `/verify-email`.
 - Architecta still reads the authenticated user locally from the shared Supabase session for route protection, profile loading, avatar rendering, onboarding checks, and feature gating.
@@ -42,7 +46,7 @@
 
 ## Redirect behavior
 
-- Protected Architecta routes redirect unauthenticated users to the shared login flow.
+- Protected Architecta routes redirect unauthenticated users to the shared login flow with a full Architecta `next` URL, not a marketing-site-relative path.
 - Legacy local auth routes remain only as thin compatibility redirects to the shared auth site.
 - Legacy callback handling no longer exchanges auth codes locally; it now forwards authenticated users to the correct post-auth destination and unauthenticated users back into the shared login flow.
 - Shared logout is handled locally by clearing the shared Supabase session in Architecta, then redirecting users to the shared login route.
