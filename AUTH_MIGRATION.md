@@ -37,18 +37,21 @@
 
 - Required shared auth env vars:
   - `NEXT_PUBLIC_APP_URL=https://entrepreneuria.io`
+  - `NEXT_PUBLIC_AUTH_APP_URL=https://entrepreneuria.io`
+  - `NEXT_PUBLIC_SITE_URL=https://entrepreneuria.io`
   - `NEXT_PUBLIC_ARCHITECTA_APP_URL=https://architecta.entrepreneuria.io`
   - `NEXT_PUBLIC_ENTREPRENEURIA_COOKIE_DOMAIN=.entrepreneuria.io`
 - Architecta consumes the shared Entrepreneuria Supabase project and shared cookie domain.
 - Supabase SSR server, middleware, and browser clients use the shared cookie name `entrepreneuria-auth-token` with `domain=.entrepreneuria.io`, `path=/`, `sameSite=lax`, and `secure` in production.
-- Canonical credential-entry pages live on `NEXT_PUBLIC_APP_URL` at `/login`, `/sign-up`, and `/verify-email`.
+- Canonical credential-entry pages live on `NEXT_PUBLIC_AUTH_APP_URL` when set, otherwise `NEXT_PUBLIC_APP_URL`, at `/login`, `/sign-up`, and `/verify-email`.
+- The canonical post-login destination for global auth is the Entrepreneuria Command Center at `/dashboard` on the shared auth app.
 - Architecta still reads the authenticated user locally from the shared Supabase session for route protection, profile loading, avatar rendering, onboarding checks, and feature gating.
 - No explicit Architecta entitlement table exists in this repo today, so local authorization only blocks access when the shared profile exposes an explicit deny signal such as `architecta_access = false` or an app list that omits `architecta`.
 - No active local Turnstile/CAPTCHA component remains in this repo after the migration audit.
 
 ## Redirect behavior
 
-- Protected Architecta routes redirect unauthenticated users to the shared login flow with a full Architecta `next` URL, not a marketing-site-relative path.
+- Protected Architecta routes redirect unauthenticated users to the shared login flow with `next` targeting the Entrepreneuria Command Center (`/dashboard` on the shared auth app), not the old Architecta dashboard.
 - Legacy local auth routes remain only as thin compatibility redirects to the shared auth site.
 - Legacy callback handling no longer exchanges auth codes locally; it now forwards authenticated users to the correct post-auth destination and unauthenticated users back into the shared login flow.
 - Shared logout is handled locally by clearing the shared Supabase session cookie in Architecta, then redirecting users to the shared login route.

@@ -12,6 +12,7 @@ export const ACCESS_DENIED_PATH = "/access-denied";
 export const SHARED_LOGIN_PATH = "/login";
 export const SHARED_SIGNUP_PATH = "/sign-up";
 export const SHARED_VERIFY_EMAIL_PATH = "/verify-email";
+export const COMMAND_CENTER_PATH = "/dashboard";
 export const ONBOARDING_PATH = "/onboarding";
 const SAFE_SHARED_AUTH_FALLBACK_PATH = "/";
 
@@ -39,11 +40,30 @@ function buildArchitectaAppHref(nextPath: string) {
   }
 }
 
+function buildCommandCenterHref() {
+  const authAppUrl = getEcosystemSiteUrl();
+
+  if (!authAppUrl) {
+    return COMMAND_CENTER_PATH;
+  }
+
+  try {
+    return new URL(COMMAND_CENTER_PATH, authAppUrl).toString();
+  } catch {
+    return COMMAND_CENTER_PATH;
+  }
+}
+
 export function sanitizeSharedAuthNextUrl(nextTarget?: string | null) {
-  const fallbackHref = buildArchitectaAppHref(APP_HOME_PATH);
+  const commandCenterHref = buildCommandCenterHref();
+  const fallbackHref = commandCenterHref;
 
   if (!nextTarget) {
     return fallbackHref;
+  }
+
+  if (nextTarget === COMMAND_CENTER_PATH) {
+    return commandCenterHref;
   }
 
   if (nextTarget.startsWith("/")) {
@@ -53,10 +73,11 @@ export function sanitizeSharedAuthNextUrl(nextTarget?: string | null) {
   try {
     const candidate = new URL(nextTarget);
     const architectaOrigin = getUrlOrigin(getEcosystemAppUrl("architecta"));
+    const authOrigin = getUrlOrigin(getEcosystemSiteUrl());
 
     if (
-      !architectaOrigin ||
-      candidate.origin !== architectaOrigin ||
+      (candidate.origin !== architectaOrigin &&
+        candidate.origin !== authOrigin) ||
       (candidate.protocol !== "http:" && candidate.protocol !== "https:")
     ) {
       return fallbackHref;

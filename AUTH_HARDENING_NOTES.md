@@ -17,12 +17,16 @@ Patterns checked:
 - `/auth/signup`
 - `/auth/callback`
 - `NEXT_PUBLIC_APP_URL`
+- `NEXT_PUBLIC_AUTH_APP_URL`
 - `NEXT_PUBLIC_ARCHITECTA_APP_URL`
 - `NEXT_PUBLIC_ENTREPRENEURIA_COOKIE_DOMAIN`
+- `NEXT_PUBLIC_SITE_URL`
 
 ## Required shared auth environment
 
 - `NEXT_PUBLIC_APP_URL=https://entrepreneuria.io`
+- `NEXT_PUBLIC_AUTH_APP_URL=https://entrepreneuria.io`
+- `NEXT_PUBLIC_SITE_URL=https://entrepreneuria.io`
 - `NEXT_PUBLIC_ARCHITECTA_APP_URL=https://architecta.entrepreneuria.io`
 - `NEXT_PUBLIC_ENTREPRENEURIA_COOKIE_DOMAIN=.entrepreneuria.io`
 
@@ -56,7 +60,7 @@ Patterns checked:
   - redirects unauthenticated users back into shared login,
   - falls back safely to `/` if the generated shared login target would loop back to the current Architecta host.
 - Hardened shared auth URL generation in `lib/auth/redirects.ts` so missing or self-referential `NEXT_PUBLIC_APP_URL` values fail closed to `/` instead of creating a bad auth redirect target.
-- Updated shared login `next` handling so protected Architecta routes send a full safe Architecta return URL, preserving query strings while rejecting off-domain return targets.
+- Updated shared login `next` handling so protected Architecta routes send users to the Entrepreneuria Command Center after global login/sign-up instead of returning to the old Architecta dashboard.
 - Centralized Supabase SSR cookie options so middleware, server helpers, and browser helpers all use `entrepreneuria-auth-token` with the shared Entrepreneuria cookie attributes.
 - Removed the redundant client-side dashboard auth redirect from `app/dashboard/page.tsx`; middleware remains the route protection owner for `/dashboard`.
 - Replaced low-risk direct client `auth.getUser()` usage in `components/blueprint/BlueprintCanvas.tsx` and `lib/auth/usePlan.ts` with the shared identity hook.
@@ -75,10 +79,9 @@ Patterns checked:
 ## Manual verification steps
 
 1. Visit a protected Architecta route while signed out and verify redirect goes to the shared Entrepreneuria login flow.
-   Expected shape: `https://entrepreneuria.io/login?next=https%3A%2F%2Farchitecta.entrepreneuria.io%2F...`
+   Expected shape: `https://entrepreneuria.io/login?next=https%3A%2F%2Fentrepreneuria.io%2Fdashboard`
 2. Complete shared login and verify return to:
-   - `/dashboard` when onboarding is complete
-   - `/onboarding` when onboarding is incomplete
+   - Entrepreneuria Command Center at `/dashboard`
 3. Hit `/auth/callback?next=/dashboard` with:
    - an active shared session and verify safe local redirect
    - no session and verify redirect to shared login

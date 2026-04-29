@@ -29,7 +29,11 @@ export function getSupabaseProjectConfig() {
 }
 
 export function getEcosystemSiteUrl(): string | undefined {
-  return cleanEnv(process.env.NEXT_PUBLIC_APP_URL);
+  return (
+    cleanEnv(process.env.NEXT_PUBLIC_AUTH_APP_URL) ??
+    cleanEnv(process.env.NEXT_PUBLIC_APP_URL) ??
+    cleanEnv(process.env.NEXT_PUBLIC_SITE_URL)
+  );
 }
 
 export function getEcosystemCookieDomain(): string | undefined {
