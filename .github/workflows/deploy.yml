@@ -19,14 +19,17 @@ jobs:
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
+          key: |
+            ${{ secrets.SSH_KEY }}
           port: ${{ secrets.PORT }}
+          command_timeout: 30m
           script: |
             set -e
             cd /var/www/architecta
             git fetch origin
             git reset --hard origin/main
-            npm ci || npm install
+            rm -rf node_modules .next
+            npm install
             npm run typecheck --if-present
             npm run build
             pm2 restart architecta
