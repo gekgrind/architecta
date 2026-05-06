@@ -1,4 +1,3 @@
-
 name: Deploy Architecta
 
 on:
@@ -7,7 +6,7 @@ on:
       - main
 
 concurrency:
-  group: production-deploy
+  group: architecta-production-deploy
   cancel-in-progress: true
 
 jobs:
@@ -27,7 +26,8 @@ jobs:
             cd /var/www/architecta
             git fetch origin
             git reset --hard origin/main
-            npm install
+            npm ci || npm install
+            npm run typecheck --if-present
             npm run build
             pm2 restart architecta
             pm2 save
