@@ -30,6 +30,7 @@ export function getSupabaseProjectConfig() {
 
 export function getEcosystemSiteUrl(): string | undefined {
   return (
+    cleanEnv(process.env.NEXT_PUBLIC_ENTREPRENEURIA_APP_URL) ??
     cleanEnv(process.env.NEXT_PUBLIC_AUTH_APP_URL) ??
     cleanEnv(process.env.NEXT_PUBLIC_APP_URL) ??
     cleanEnv(process.env.NEXT_PUBLIC_SITE_URL)
