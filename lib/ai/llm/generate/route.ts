@@ -7,6 +7,8 @@ import type { LlmGenerateInput } from "@/lib/ai/llm/types";
 
 // TODO: Replace with your Supabase server client lookup
 async function getWorkspacePreference(workspaceId: string) {
+  void workspaceId;
+
   // Example default:
   return { preference: "auto" as const };
 }

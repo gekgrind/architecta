@@ -1,17 +1,9 @@
-
-import ArchitectaPrismBackground from "@/components/backgrounds/ArchitectaPrismBackground";
+import type React from "react";
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <div className="relative min-h-screen">
-      <div className="fixed inset-0 -z-10">
-        <ArchitectaPrismBackground preset="dashboard" />
-      </div>
-      {children}
-    </div>
-  );
+  return <div className="min-h-screen bg-[#041C3B]">{children}</div>;
 }

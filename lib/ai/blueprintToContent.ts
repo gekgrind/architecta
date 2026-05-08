@@ -5,6 +5,8 @@ export function blueprintToContent(
   nodes: Node[],
   edges: Edge[]
 ): GeneratedContent {
+  void edges;
+
   if (!nodes.length) {
     return {
       headline: "",

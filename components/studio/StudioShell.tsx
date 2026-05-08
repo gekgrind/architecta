@@ -6,6 +6,7 @@ import StudioSidebar from "./StudioSidebar";
 import StudioCanvas from "./StudioCanvas";
 import StudioInspector from "./StudioInspector";
 
+import { BlueprintBackground } from "@/components/dashboard/BlueprintBackground";
 import {
   StudioMode,
   SelectedNode,
@@ -293,32 +294,35 @@ export default function StudioShell() {
    * Render
    * ---------------------------------------------------------- */
   return (
-    <div className="flex h-[calc(100vh-64px)] w-full bg-[#0b1220] text-white">
-      <aside className="w-[260px] border-r border-white/10">
-        <StudioSidebar mode={mode} onModeChange={setMode} />
-      </aside>
+    <div className="relative min-h-screen overflow-hidden bg-[#041C3B] text-white">
+      <BlueprintBackground />
+      <div className="relative z-10 flex h-screen w-full bg-[rgba(11,18,32,0.88)] backdrop-blur-sm">
+        <aside className="w-[260px] border-r border-white/10">
+          <StudioSidebar mode={mode} onModeChange={setMode} />
+        </aside>
 
-      <main className="flex-1 overflow-hidden">
-        <StudioCanvas
-          mode={mode}
-          onSelectNode={handleNodeSelect}
-          onGraphChange={handleGraphChange}
-          onBackToBlueprint={handleBackToBlueprint}
-          onRefine={handleRefine}
-        />
-      </main>
+        <main className="flex-1 overflow-hidden">
+          <StudioCanvas
+            mode={mode}
+            onSelectNode={handleNodeSelect}
+            onGraphChange={handleGraphChange}
+            onBackToBlueprint={handleBackToBlueprint}
+            onRefine={handleRefine}
+          />
+        </main>
 
-      <aside className="w-[300px] border-l border-white/10">
-        <StudioInspector
-          mode={mode}
-          selectedNode={selectedNode}
-          suggestions={suggestions}
-          onApplySuggestion={handleSuggestionApply}
-          aiExplanation={aiExplanation}
-          onExplain={handleExplain}
-          onGenerate={handleGenerateContent}
-        />
-      </aside>
+        <aside className="w-[300px] border-l border-white/10">
+          <StudioInspector
+            mode={mode}
+            selectedNode={selectedNode}
+            suggestions={suggestions}
+            onApplySuggestion={handleSuggestionApply}
+            aiExplanation={aiExplanation}
+            onExplain={handleExplain}
+            onGenerate={handleGenerateContent}
+          />
+        </aside>
+      </div>
     </div>
   );
 }

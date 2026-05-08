@@ -12,11 +12,16 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 
 export function AuthNav() {
-  const supabase = createSupabaseBrowserClient();
   const { loading, isAuthenticated, displayName, avatarUrl } = useAuthIdentity();
 
   async function handleLogout() {
-    await supabase.auth.signOut();
+    try {
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
+    } catch {
+      // Redirect through shared auth even if local session cleanup is unavailable.
+    }
+
     window.location.assign(buildSharedLoginHref());
   }
 

@@ -21,6 +21,9 @@ const PROTECTED_PREFIXES = [
   "/dashboard",
   "/generate",
   "/library",
+  "/calendar",
+  "/seo",
+  "/settings",
   "/studio",
   "/app",
 ];
@@ -105,6 +108,9 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/generate") ||
     pathname.startsWith("/library") ||
+    pathname.startsWith("/calendar") ||
+    pathname.startsWith("/seo") ||
+    pathname.startsWith("/settings") ||
     pathname.startsWith("/studio") ||
     pathname.startsWith("/app/architecta");
 

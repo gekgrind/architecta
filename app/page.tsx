@@ -1,27 +1,27 @@
-import Navbar from "@/components/landing/Navbar";
-import Hero from "@/components/landing/Hero";
-import ProblemSection from "@/components/landing/ProblemSection";
-import SolutionSection from "@/components/landing/SolutionSection";
-import Features from "@/components/landing/Features";
-import HowItWorks from "@/components/landing/HowItWorks";
-import AudienceSection from "@/components/landing/AudienceSection";
-import EcosystemSection from "@/components/landing/EcosystemSection";
-import CTASection from "@/components/landing/CTASection";
-import Footer from "@/components/landing/Footer";
+import { redirect } from "next/navigation";
 
-export default function HomePage() {
-  return (
-    <main className="min-h-screen bg-background">
-      <Navbar />
-      <Hero />
-      <ProblemSection />
-      <SolutionSection />
-      <Features />
-      <HowItWorks />
-      <AudienceSection />
-      <EcosystemSection />
-      <CTASection />
-      <Footer />
-    </main>
-  );
+import {
+  APP_HOME_PATH,
+  ONBOARDING_PATH,
+  buildSharedLoginHref,
+} from "@/lib/auth/redirects";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+export default async function HomePage() {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect(buildSharedLoginHref(APP_HOME_PATH));
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("onboarding_complete")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  redirect(profile?.onboarding_complete ? APP_HOME_PATH : ONBOARDING_PATH);
 }

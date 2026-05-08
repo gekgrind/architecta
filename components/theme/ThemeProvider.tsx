@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import BlueprintBackground from "@/components/blueprint/BlueprintBackground";
 
 type ThemeMode = "dark" | "light";
@@ -14,6 +15,30 @@ const ThemeContext = createContext<ThemeContextType | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<ThemeMode>("dark");
+  const pathname = usePathname();
+  const usesAuthenticatedAppBackground =
+    pathname === "/dashboard" ||
+    pathname.startsWith("/dashboard/") ||
+    pathname === "/analytics" ||
+    pathname.startsWith("/analytics/") ||
+    pathname === "/brand-kit" ||
+    pathname.startsWith("/brand-kit/") ||
+    pathname === "/calendar" ||
+    pathname.startsWith("/calendar/") ||
+    pathname === "/campaigns" ||
+    pathname.startsWith("/campaigns/") ||
+    pathname === "/content-strategy" ||
+    pathname.startsWith("/content-strategy/") ||
+    pathname === "/generate" ||
+    pathname.startsWith("/generate/") ||
+    pathname === "/library" ||
+    pathname.startsWith("/library/") ||
+    pathname === "/seo" ||
+    pathname.startsWith("/seo/") ||
+    pathname === "/settings" ||
+    pathname.startsWith("/settings/") ||
+    pathname === "/studio" ||
+    pathname.startsWith("/studio/");
 
   // Apply class to <html>
   useEffect(() => {
@@ -28,7 +53,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
-      <BlueprintBackground theme={theme} />
+      {!usesAuthenticatedAppBackground && <BlueprintBackground theme={theme} />}
       {children}
     </ThemeContext.Provider>
   );

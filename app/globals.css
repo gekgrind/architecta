@@ -10,6 +10,8 @@
 
 @layer base {
   :root {
+    --font-science-gothic: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
     --background: 222 47% 7%;
     --foreground: 210 40% 98%;
 

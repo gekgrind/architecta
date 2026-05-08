@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Search, Bell, HelpCircle, ChevronRight, Settings, LogOut, User } from "lucide-react";
 
 import { useAuthIdentity } from "@/hooks/use-auth-identity";
@@ -23,11 +24,16 @@ interface HeaderProps {
 }
 
 export function Header({ breadcrumbs = [], className }: HeaderProps) {
-  const supabase = createSupabaseBrowserClient();
   const { avatarUrl, displayName } = useAuthIdentity();
 
   async function handleLogout() {
-    await supabase.auth.signOut();
+    try {
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
+    } catch {
+      // Redirect through shared auth even if local session cleanup is unavailable.
+    }
+
     window.location.assign(buildSharedLoginHref());
   }
 
@@ -85,13 +91,17 @@ export function Header({ breadcrumbs = [], className }: HeaderProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuItem>
-              <User className="mr-2 h-4 w-4" />
-              Profile
+            <DropdownMenuItem asChild>
+              <Link href="/settings">
+                <User className="mr-2 h-4 w-4" />
+                Profile
+              </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
+            <DropdownMenuItem asChild>
+              <Link href="/settings">
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="text-red-600" onClick={() => void handleLogout()}>

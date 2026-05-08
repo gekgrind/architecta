@@ -9,6 +9,8 @@ import {
   Target,
   Palette,
   BarChart3,
+  Search,
+  CalendarDays,
   ChevronDown,
   Settings,
   LogOut,
@@ -34,7 +36,9 @@ const navItems = [
   { href: "/generate", label: "Generate", icon: Sparkles },
   { href: "/library", label: "Library", icon: Library },
   { href: "/campaigns", label: "Campaigns", icon: Target },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/brand-kit", label: "Brand Kit", icon: Palette },
+  { href: "/seo", label: "SEO Tools", icon: Search },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
 
@@ -44,11 +48,16 @@ interface SidebarProps {
 
 export function Sidebar({ className }: SidebarProps) {
   const pathname = usePathname();
-  const supabase = createSupabaseBrowserClient();
   const { avatarUrl, displayName, workspaceName } = useAuthIdentity();
 
   async function handleLogout() {
-    await supabase.auth.signOut();
+    try {
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
+    } catch {
+      // Redirect through shared auth even if local session cleanup is unavailable.
+    }
+
     window.location.assign(buildSharedLoginHref());
   }
 
@@ -110,13 +119,17 @@ export function Sidebar({ className }: SidebarProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem>
-                <Building2 className="mr-2 h-4 w-4" />
-                Switch Workspace
+              <DropdownMenuItem asChild>
+                <Link href="/settings">
+                  <Building2 className="mr-2 h-4 w-4" />
+                  Switch Workspace
+                </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Settings className="mr-2 h-4 w-4" />
-                Settings
+              <DropdownMenuItem asChild>
+                <Link href="/settings">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="text-red-600" onClick={() => void handleLogout()}>

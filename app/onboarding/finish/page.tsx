@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import FinishStep from "@/components/onboarding/FinishStep";
+import { APP_HOME_PATH } from "@/lib/auth/redirects";
 import {
   getOrCreateArchitectaOnboarding,
   completeArchitectaOnboarding,
@@ -18,5 +18,5 @@ export default async function FinishPage() {
     await completeArchitectaOnboarding();
   }
 
-  return <FinishStep />;
+  redirect(APP_HOME_PATH);
 }

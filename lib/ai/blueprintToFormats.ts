@@ -21,6 +21,8 @@ export function blueprintToFormats(
   nodes: Node[],
   edges: Edge[]
 ): MultiFormatContent {
+  void edges;
+
   const steps = nodes.map((n) => n.data?.label ?? "Step");
 
   return {
