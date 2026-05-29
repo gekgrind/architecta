@@ -1,5 +1,7 @@
 type EcosystemApp = "architecta" | "prospra" | "directorium" | "synceri";
 
+export const COMMAND_CENTER_PATH = "/dashboard";
+
 function cleanEnv(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
@@ -35,6 +37,20 @@ export function getEcosystemSiteUrl(): string | undefined {
     cleanEnv(process.env.NEXT_PUBLIC_APP_URL) ??
     cleanEnv(process.env.NEXT_PUBLIC_SITE_URL)
   );
+}
+
+export function getCommandCenterUrl(): string {
+  const siteUrl = getEcosystemSiteUrl();
+
+  if (!siteUrl) {
+    return COMMAND_CENTER_PATH;
+  }
+
+  try {
+    return new URL(COMMAND_CENTER_PATH, siteUrl).toString();
+  } catch {
+    return COMMAND_CENTER_PATH;
+  }
 }
 
 export function getEcosystemCookieDomain(): string | undefined {
