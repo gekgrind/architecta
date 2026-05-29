@@ -1,4 +1,6 @@
 import {
+  COMMAND_CENTER_PATH,
+  getCommandCenterUrl,
   getEcosystemAppUrl,
   getEcosystemSiteUrl,
   getUrlOrigin,
@@ -12,7 +14,6 @@ export const ACCESS_DENIED_PATH = "/access-denied";
 export const SHARED_LOGIN_PATH = "/login";
 export const SHARED_SIGNUP_PATH = "/sign-up";
 export const SHARED_VERIFY_EMAIL_PATH = "/verify-email";
-export const COMMAND_CENTER_PATH = "/dashboard";
 export const ONBOARDING_PATH = "/onboarding";
 const SAFE_SHARED_AUTH_FALLBACK_PATH = "/";
 
@@ -41,17 +42,7 @@ function buildArchitectaAppHref(nextPath: string) {
 }
 
 function buildCommandCenterHref() {
-  const authAppUrl = getEcosystemSiteUrl();
-
-  if (!authAppUrl) {
-    return COMMAND_CENTER_PATH;
-  }
-
-  try {
-    return new URL(COMMAND_CENTER_PATH, authAppUrl).toString();
-  } catch {
-    return COMMAND_CENTER_PATH;
-  }
+  return getCommandCenterUrl();
 }
 
 export function sanitizeSharedAuthNextUrl(nextTarget?: string | null) {
