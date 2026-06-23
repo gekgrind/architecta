@@ -4,21 +4,13 @@ import { motion } from "framer-motion";
 import { Bell, LayoutGrid, Search } from "lucide-react";
 import Link from "next/link";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
-type DashboardTopBarProps = {
-  avatarUrl?: string | null;
-  displayName: string;
-  workspaceName: string;
-};
-
-export function DashboardTopBar({ avatarUrl, displayName, workspaceName }: DashboardTopBarProps) {
+export function DashboardTopBar() {
   return (
     <motion.header
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
-      className="fixed left-4 right-4 top-4 z-50 h-16 xl:left-24"
+      className="fixed left-4 right-4 top-4 z-50 h-16 md:left-[92px]"
     >
       <div className="flex h-full w-full items-center gap-4 rounded-2xl border border-white/10 bg-[#0B2B57]/40 px-4 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)] backdrop-blur-xl sm:px-6">
         <Link href="/dashboard" className="flex min-w-0 items-center gap-3 sm:min-w-[200px]">
@@ -60,21 +52,6 @@ export function DashboardTopBar({ avatarUrl, displayName, workspaceName }: Dashb
             <Bell className="h-5 w-5 text-[#BCC0D8] transition-colors hover:text-white" />
             <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-[#041C3B] bg-[#00D4FF] shadow-[0_0_5px_#00D4FF]" />
           </button>
-          <div className="hidden h-8 w-px bg-white/10 sm:block" />
-          <Link href="/settings" className="group flex items-center gap-3 pl-1">
-            <div className="hidden text-right sm:block">
-              <p className="max-w-36 truncate text-xs font-semibold text-white transition-colors group-hover:text-[#00D4FF]">
-                {displayName}
-              </p>
-              <p className="max-w-36 truncate text-[10px] text-[#BCC0D8]">{workspaceName}</p>
-            </div>
-            <Avatar className="h-10 w-10 rounded-xl border-2 border-[#00D4FF]/20 p-0.5 transition-all group-hover:border-[#00D4FF]">
-              <AvatarImage src={avatarUrl ?? undefined} />
-              <AvatarFallback className="rounded-lg bg-[#0B2B57] text-sm font-semibold text-white">
-                {displayName.slice(0, 1).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-          </Link>
         </div>
       </div>
     </motion.header>

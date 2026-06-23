@@ -7,6 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   getAvatarUrl,
   getDisplayName,
+  getProfileTitle,
   hasArchitectaAccess,
   type SharedProfile,
 } from "@/lib/auth/profile";
@@ -136,6 +137,7 @@ export function useAuthIdentity() {
     isAuthenticated: Boolean(state.user),
     displayName: getDisplayName(state.user, state.profile),
     avatarUrl: getAvatarUrl(state.user, state.profile),
+    title: getProfileTitle(state.user, state.profile),
     hasArchitectaAccess: hasArchitectaAccess(state.profile),
     workspaceName:
       typeof state.profile?.workspace_name === "string"

@@ -14,6 +14,8 @@ import { StrategicOverview } from "@/components/dashboard/StrategicOverview";
 export type ArchitectaDashboardIdentity = {
   avatarUrl?: string | null;
   displayName: string;
+  email?: string | null;
+  title?: string | null;
   workspaceName: string;
 };
 
@@ -28,12 +30,15 @@ export function ArchitectaDashboard({ identity, preview = false }: ArchitectaDas
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#041C3B] font-[var(--font-inter)] text-white">
       <BlueprintBackground />
-      <DashboardSidebar />
-      <DashboardTopBar
-        avatarUrl={identity.avatarUrl}
-        displayName={identity.displayName}
-        workspaceName={identity.workspaceName}
+      <DashboardSidebar
+        user={{
+          avatarUrl: identity.avatarUrl,
+          email: identity.email,
+          fullName: identity.displayName,
+          title: identity.title ?? identity.workspaceName,
+        }}
       />
+      <DashboardTopBar />
 
       {preview ? (
         <div className="fixed bottom-4 right-4 z-[60] rounded-full border border-[#FFE14D]/35 bg-[#041C3B]/90 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[#FFE14D] shadow-[0_0_18px_rgba(255,225,77,0.18)] backdrop-blur">
@@ -41,7 +46,7 @@ export function ArchitectaDashboard({ identity, preview = false }: ArchitectaDas
         </div>
       ) : null}
 
-      <main className="relative z-10 min-h-screen px-4 pb-32 pt-28 xl:pl-24 xl:pr-8">
+      <main className="relative z-10 min-h-screen px-4 pb-32 pt-28 md:pl-[92px] xl:pr-8">
         <div className="mx-auto max-w-7xl space-y-12">
           <motion.div
             initial={shouldReduceMotion ? false : { y: 30, opacity: 0 }}

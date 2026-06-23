@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import {
   BarChart3,
   Globe,
@@ -8,25 +7,33 @@ import {
   PenTool,
   Rocket,
   Search,
-  Settings,
   Target,
   Users,
   Waypoints,
   Zap,
-  type LucideIcon,
 } from "lucide-react";
+<<<<<<< HEAD
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+=======
+>>>>>>> 0b07735f6169930c8d8cc15b622e31bd754f21d0
 
-import { cn } from "@/lib/utils";
+import { AppSidebar } from "@/components/navigation/AppSidebar";
+import type {
+  SidebarBrand,
+  SidebarNavigationItem,
+  SidebarUser,
+} from "@/lib/navigation/types";
 
-type NavItem = {
-  icon: LucideIcon;
-  label: string;
-  href: string;
+const architectaBrand: SidebarBrand = {
+  appName: "Architecta",
+  eyebrow: "Blueprint OS",
+  tagline: "AI content studio",
+  homeHref: "/dashboard",
+  logoIcon: LayoutDashboard,
 };
 
-const navItems: NavItem[] = [
+const architectaNavItems: SidebarNavigationItem[] = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
   { icon: Zap, label: "Strategy Engine", href: "/strategy-engine" },
   { icon: PenTool, label: "Content Architect", href: "/studio" },
@@ -34,12 +41,12 @@ const navItems: NavItem[] = [
   { icon: Users, label: "Audience Intelligence", href: "/analytics" },
   { icon: Globe, label: "SEO Blueprint", href: "/seo" },
   { icon: Waypoints, label: "Funnel Architect", href: "/campaigns" },
-  { icon: Search, label: "Competitor Intel", href: "/analytics" },
-  { icon: Rocket, label: "AI Campaigns", href: "/campaigns" },
-  { icon: BarChart3, label: "Insights", href: "/analytics" },
-  { icon: Settings, label: "Command Center", href: "https://entrepreneuria.io/dashboard" },
+  { icon: Search, label: "Competitor Intel", href: "/analytics#competitor-intel" },
+  { icon: Rocket, label: "AI Campaigns", href: "/campaigns#ai-campaigns" },
+  { icon: BarChart3, label: "Insights", href: "/analytics#insights" },
 ];
 
+<<<<<<< HEAD
 export function DashboardSidebar() {
   const pathname = usePathname();
 
@@ -161,5 +168,18 @@ export function DashboardSidebar() {
         </ul>
       </nav>
     </>
+=======
+type DashboardSidebarProps = {
+  user?: SidebarUser | null;
+};
+
+export function DashboardSidebar({ user }: DashboardSidebarProps) {
+  return (
+    <AppSidebar
+      brand={architectaBrand}
+      navItems={architectaNavItems}
+      user={user}
+    />
+>>>>>>> 0b07735f6169930c8d8cc15b622e31bd754f21d0
   );
 }
