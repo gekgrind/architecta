@@ -23,6 +23,18 @@ export type ContentPerformanceSummary = {
   impressions?: number;
 };
 
+export type ContentMediaKind = "image" | "video" | "storyboard";
+
+export type ContentMedia = {
+  kind: ContentMediaKind;
+  /** Signed URL for an image preview (only set when kind === "image"). */
+  imageUrl?: string;
+  /** Signed URL for a playable video (only set when kind === "video"). */
+  videoUrl?: string;
+  /** Short label describing the asset for badges / a11y. */
+  label?: string;
+};
+
 export type ContentItem = {
   id: EntityId;
   contentType: ContentType;
@@ -37,4 +49,5 @@ export type ContentItem = {
   campaign?: string;
   brandName?: string;
   tags?: string[];
+  media?: ContentMedia;
 };

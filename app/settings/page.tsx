@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Building2, Settings, User } from "lucide-react";
 
-import { ClaudeToggle } from "@/components/settings/ClaudeToggle";
+import { AiProviderSettings } from "@/components/settings/AiProviderSettings";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { useAuthIdentity } from "@/hooks/use-auth-identity";
@@ -129,7 +129,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <ClaudeToggle initial={false} />
+          <AiProviderSettings />
         </section>
       </div>
     </DashboardLayout>

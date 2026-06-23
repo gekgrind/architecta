@@ -1,7 +1,7 @@
 "use server";
 
+import { runGateway } from "@/lib/ai/llm/run";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { generateWithClaude } from "@/lib/ai/actions/anthropic";
 
 export async function getOnboardingSuggestions({
   step,
@@ -16,7 +16,7 @@ export async function getOnboardingSuggestions({
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { ok: false, error: "Not authenticated" };
+    return { ok: false as const, error: "Not authenticated" };
   }
 
   const prompt = `
@@ -31,12 +31,19 @@ Return helpful, concise suggestions only.
 No explanations.
 No markdown.
 No emojis.
-`;
+`.trim();
 
-  const result = await generateWithClaude(prompt);
+  try {
+    const result = await runGateway({
+      userId: user.id,
+      task: "ONBOARDING_SUGGESTION",
+      tier: "draft",
+      prompt,
+    });
 
-  return {
-    ok: true,
-    suggestions: result.text ?? "",
-  };
+    return { ok: true as const, suggestions: result.text };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Suggestion failed";
+    return { ok: false as const, error: message };
+  }
 }

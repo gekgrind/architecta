@@ -33,12 +33,12 @@ function toAnthropicMessages(messages: LlmMessage[]) {
 }
 
 export function createAnthropicClient(): LlmClient {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY");
-
   return {
     provider: "anthropic",
     async generate(input) {
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY");
+
       const started = Date.now();
 
       const { system, messages } = toAnthropicMessages(input.messages);

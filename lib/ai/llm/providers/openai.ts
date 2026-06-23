@@ -21,12 +21,12 @@ function toOpenAiMessages(messages: LlmMessage[]) {
 }
 
 export function createOpenAiClient(): LlmClient {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
-
   return {
     provider: "openai",
     async generate(input) {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+
       const started = Date.now();
 
       // Using fetch keeps dependencies simple.

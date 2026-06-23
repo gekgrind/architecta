@@ -18,7 +18,7 @@ export function DashboardTopBar({ avatarUrl, displayName, workspaceName }: Dashb
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
-      className="fixed left-4 right-4 top-4 z-50 h-16 xl:left-72"
+      className="fixed left-4 right-4 top-4 z-50 h-16 xl:left-24"
     >
       <div className="flex h-full w-full items-center gap-4 rounded-2xl border border-white/10 bg-[#0B2B57]/40 px-4 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)] backdrop-blur-xl sm:px-6">
         <Link href="/dashboard" className="flex min-w-0 items-center gap-3 sm:min-w-[200px]">

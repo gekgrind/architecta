@@ -6,6 +6,7 @@ import {
   hasSharedAuthLoopRisk,
   sanitizePostAuthRedirectPath,
 } from "@/lib/auth/redirects";
+import { getArchitectaOnboardingStatus } from "@/lib/onboarding/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
@@ -28,14 +29,10 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL(loginHref, request.url));
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("onboarding_complete")
-    .eq("id", user.id)
-    .maybeSingle();
+  const onboarding = await getArchitectaOnboardingStatus();
 
   const redirectPath = getPostAuthRedirectPath(
-    Boolean(profile?.onboarding_complete),
+    onboarding.onboardingComplete,
     nextTarget ?? nextPath
   );
 

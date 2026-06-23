@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npx tsc:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(echo \"EXIT: $?\")"
     ]
   }
 }

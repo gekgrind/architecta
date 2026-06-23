@@ -3,13 +3,13 @@ import { apiError, apiOk, parseJsonBody } from "@/lib/api/response";
 import { getAuthenticatedUser } from "@/lib/auth/server";
 import { getMemoryForGeneration } from "@/lib/ai/getMemoryForGeneration";
 import type { GenerationRequest, GenerationResult } from "@/lib/domain";
-import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createSupabaseServiceClient();
+    const supabase = await createSupabaseServerClient();
     const session = await getAuthenticatedUser(supabase);
     if (!session) return apiError("unauthorized", "Unauthorized");
 

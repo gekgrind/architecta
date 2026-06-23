@@ -6,44 +6,33 @@ type TaskRoute = {
   premium: ModelChoice;
 };
 
-// Keep this small and tweak over time.
-// The point: Architecta chooses by intent, users can override in “Advanced”.
+// Architecta defaults: Anthropic for deep brand/strategy/longform work, OpenAI for
+// fast iteration. Users can pin a provider in settings to override the default.
+const SONNET: ModelChoice = { provider: "anthropic", model: "claude-sonnet-4-6" };
+const OPUS: ModelChoice = { provider: "anthropic", model: "claude-opus-4-8" };
+const HAIKU: ModelChoice = {
+  provider: "anthropic",
+  model: "claude-haiku-4-5-20251001",
+};
+const GPT_4O: ModelChoice = { provider: "openai", model: "gpt-4o" };
+const GPT_4O_MINI: ModelChoice = { provider: "openai", model: "gpt-4o-mini" };
+const GPT_41_MINI: ModelChoice = { provider: "openai", model: "gpt-4.1-mini" };
+
 export const TASK_ROUTES: Record<TaskType, TaskRoute> = {
-  ARTICLE_LONGFORM: {
-    draft:   { provider: "openai",    model: "gpt-4o-mini" },
-    standard:{ provider: "anthropic", model: "claude-3-5-sonnet-latest" },
-    premium: { provider: "openai",    model: "gpt-4o" },
-  },
-  BLOG_OUTLINE: {
-    draft:   { provider: "openai",    model: "gpt-4o-mini" },
-    standard:{ provider: "openai",    model: "gpt-4o" },
-    premium: { provider: "anthropic", model: "claude-3-5-sonnet-latest" },
-  },
-  AD_CAMPAIGN: {
-    draft:   { provider: "openai",    model: "gpt-4o-mini" },
-    standard:{ provider: "openai",    model: "gpt-4o" },
-    premium: { provider: "anthropic", model: "claude-3-5-sonnet-latest" },
-  },
-  LANDING_PAGE_COPY: {
-    draft:   { provider: "openai",    model: "gpt-4o-mini" },
-    standard:{ provider: "anthropic", model: "claude-3-5-sonnet-latest" },
-    premium: { provider: "openai",    model: "gpt-4o" },
-  },
-  EMAIL_SEQUENCE: {
-    draft:   { provider: "openai",    model: "gpt-4o-mini" },
-    standard:{ provider: "anthropic", model: "claude-3-5-sonnet-latest" },
-    premium: { provider: "openai",    model: "gpt-4o" },
-  },
-  SOCIAL_CAPTIONS: {
-    draft:   { provider: "openai",    model: "gpt-4o-mini" },
-    standard:{ provider: "openai",    model: "gpt-4o-mini" },
-    premium: { provider: "openai",    model: "gpt-4o" },
-  },
-  SEO_BRIEF: {
-    draft:   { provider: "openai",    model: "gpt-4o-mini" },
-    standard:{ provider: "openai",    model: "gpt-4o" },
-    premium: { provider: "anthropic", model: "claude-3-5-sonnet-latest" },
-  },
+  ARTICLE_LONGFORM:      { draft: GPT_41_MINI, standard: SONNET,    premium: OPUS },
+  BLOG_OUTLINE:          { draft: GPT_4O_MINI, standard: GPT_4O,    premium: SONNET },
+  AD_CAMPAIGN:           { draft: GPT_4O_MINI, standard: GPT_4O,    premium: SONNET },
+  LANDING_PAGE_COPY:     { draft: GPT_41_MINI, standard: SONNET,    premium: OPUS },
+  EMAIL_SEQUENCE:        { draft: GPT_4O_MINI, standard: SONNET,    premium: OPUS },
+  SOCIAL_CAPTIONS:       { draft: GPT_4O_MINI, standard: GPT_4O,    premium: SONNET },
+  SEO_BRIEF:             { draft: GPT_4O_MINI, standard: GPT_4O,    premium: SONNET },
+  BRAND_OVERVIEW:        { draft: HAIKU,       standard: SONNET,    premium: OPUS },
+  BRAND_VOICE:           { draft: HAIKU,       standard: SONNET,    premium: OPUS },
+  ONBOARDING_SUGGESTION: { draft: GPT_4O_MINI, standard: GPT_4O_MINI, premium: GPT_4O },
+  CONTENT_STRATEGY:      { draft: GPT_41_MINI, standard: SONNET,    premium: OPUS },
+  POST_GENERATION:       { draft: GPT_4O_MINI, standard: SONNET,    premium: OPUS },
+  POST_REVISION:         { draft: GPT_4O_MINI, standard: GPT_4O,    premium: SONNET },
+  CAMPAIGN_PLAN:         { draft: GPT_41_MINI, standard: SONNET,    premium: OPUS },
 };
 
 export function normalizeTier(tier?: QualityTier): QualityTier {

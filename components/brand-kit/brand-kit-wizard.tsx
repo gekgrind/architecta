@@ -59,6 +59,8 @@ export function BrandKitWizard() {
   const [currentStep, setCurrentStep] = useState(1)
   const [formData, setFormData] = useState<BrandKitFormData>(initialFormData)
   const [isComplete, setIsComplete] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const progress = (currentStep / steps.length) * 100
 
@@ -66,11 +68,61 @@ export function BrandKitWizard() {
     setFormData((prev) => ({ ...prev, ...data }))
   }
 
-  const handleNext = () => {
+  const persistBrandProfile = async () => {
+    const payload = {
+      brandName: formData.brandName,
+      industry: formData.industry,
+      website: formData.website,
+      description: formData.description,
+      audience: formData.demographics,
+      toneVoice: formData.toneAttributes.join(", "),
+      voiceDescription: formData.voiceDescription,
+      topics: {
+        include: formData.topicsInclude,
+        avoid: formData.topicsAvoid,
+      },
+      bannedPhrases: formData.bannedPhrases,
+      requiredElements: formData.requiredElements,
+      examplePosts: formData.examplePosts.map((post) => ({
+        id: post.id,
+        type: post.type,
+        content: post.content,
+        whyItWorks: post.whyItWorks,
+      })),
+    }
+
+    const res = await fetch("/api/brand-profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+
+    const json = (await res.json().catch(() => null)) as
+      | { ok?: boolean; error?: { message?: string } }
+      | null
+
+    if (!res.ok || !json?.ok) {
+      throw new Error(json?.error?.message ?? `Save failed (${res.status})`)
+    }
+  }
+
+  const handleNext = async () => {
     if (currentStep < steps.length) {
       setCurrentStep((prev) => prev + 1)
-    } else {
+      return
+    }
+
+    setIsSaving(true)
+    setSaveError(null)
+    try {
+      await persistBrandProfile()
       setIsComplete(true)
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Could not save brand kit"
+      setSaveError(message)
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -150,19 +202,30 @@ export function BrandKitWizard() {
       </Card>
 
       {/* Navigation */}
-      <div className="flex justify-between">
-        <Button variant="ghost" onClick={handleBack} disabled={currentStep === 1} className="gap-2">
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Button>
-        <Button
-          onClick={handleNext}
-          disabled={!canProceed()}
-          className="gap-2 bg-gradient-to-r from-primary to-secondary text-primary-foreground hover:opacity-90"
-        >
-          {currentStep === steps.length ? "Complete" : "Next"}
-          <ArrowRight className="h-4 w-4" />
-        </Button>
+      <div className="space-y-3">
+        {saveError && (
+          <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+            {saveError}
+          </div>
+        )}
+        <div className="flex justify-between">
+          <Button variant="ghost" onClick={handleBack} disabled={currentStep === 1 || isSaving} className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+          <Button
+            onClick={handleNext}
+            disabled={!canProceed() || isSaving}
+            className="gap-2 bg-gradient-to-r from-primary to-secondary text-primary-foreground hover:opacity-90"
+          >
+            {currentStep === steps.length
+              ? isSaving
+                ? "Saving..."
+                : "Complete"
+              : "Next"}
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </div>
   )

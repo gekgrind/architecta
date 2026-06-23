@@ -17,7 +17,14 @@ export type LlmTaskType =
   | "LANDING_PAGE_COPY"
   | "EMAIL_SEQUENCE"
   | "SOCIAL_CAPTIONS"
-  | "SEO_BRIEF";
+  | "SEO_BRIEF"
+  | "BRAND_OVERVIEW"
+  | "BRAND_VOICE"
+  | "ONBOARDING_SUGGESTION"
+  | "CONTENT_STRATEGY"
+  | "POST_GENERATION"
+  | "POST_REVISION"
+  | "CAMPAIGN_PLAN";
 
 export type QualityTier = "draft" | "standard" | "premium";
 

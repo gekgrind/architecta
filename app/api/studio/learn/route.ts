@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { aggregateMemory } from "@/lib/ai/memoryAggregator";
 import { apiError, apiOk, parseJsonBody } from "@/lib/api/response";
 import { getAuthenticatedUser } from "@/lib/auth/server";
-import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
@@ -17,7 +17,7 @@ type AggregatedMemoryItem = {
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createSupabaseServiceClient();
+    const supabase = await createSupabaseServerClient();
     const session = await getAuthenticatedUser(supabase);
     if (!session) return apiError("unauthorized", "Unauthorized");
 

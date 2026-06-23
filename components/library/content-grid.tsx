@@ -5,7 +5,17 @@ import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { ContentTypeIcon } from "@/components/ui/content-type-icon"
 import type { ContentItem } from "@/lib/types"
-import { Calendar, BarChart2, Edit, Copy, Trash2, Share2 } from "lucide-react"
+import {
+  Calendar,
+  BarChart2,
+  Edit,
+  Copy,
+  Trash2,
+  Share2,
+  Film,
+  ImageIcon,
+  Layers,
+} from "lucide-react"
 
 interface ContentGridProps {
   items: ContentItem[]
@@ -21,9 +31,57 @@ export function ContentGrid({ items }: ContentGridProps) {
   )
 }
 
+function MediaThumb({ media }: { media: NonNullable<ContentItem["media"]> }) {
+  if (media.kind === "image" && media.imageUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={media.imageUrl}
+        alt={media.label ?? "Generated image"}
+        className="h-full w-full object-cover"
+      />
+    )
+  }
+  if (media.kind === "video" && media.videoUrl) {
+    return (
+      <video
+        src={media.videoUrl}
+        muted
+        playsInline
+        preload="metadata"
+        className="h-full w-full object-cover"
+      />
+    )
+  }
+  // Storyboard or missing URL placeholder.
+  const Icon = media.kind === "video" ? Film : media.kind === "storyboard" ? Layers : ImageIcon
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-muted">
+      <Icon className="h-8 w-8 text-muted-foreground" />
+    </div>
+  )
+}
+
+function MediaBadge({ media }: { media: NonNullable<ContentItem["media"]> }) {
+  const Icon =
+    media.kind === "image" ? ImageIcon : media.kind === "video" ? Film : Layers
+  return (
+    <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-background/85 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-foreground backdrop-blur">
+      <Icon className="h-3 w-3" />
+      {media.kind === "storyboard" ? "Storyboard" : media.kind}
+    </span>
+  )
+}
+
 function ContentCard({ item }: { item: ContentItem }) {
   return (
     <Card className="group relative overflow-hidden transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+      {item.media && (
+        <div className="relative aspect-video w-full overflow-hidden border-b border-border bg-muted">
+          <MediaThumb media={item.media} />
+          <MediaBadge media={item.media} />
+        </div>
+      )}
       <CardContent className="p-4">
         {/* Header */}
         <div className="flex items-start justify-between mb-3">

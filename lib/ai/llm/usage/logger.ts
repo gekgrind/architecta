@@ -1,7 +1,9 @@
+import "server-only";
+
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { LlmGenerateInput, LlmResult } from "../types";
 import { estimateCostUSD } from "./cost";
 
-// Stub: replace with Supabase insert later
 export async function logLlmCall(args: {
   input: LlmGenerateInput;
   result: LlmResult;
@@ -14,18 +16,39 @@ export async function logLlmCall(args: {
     outputTokens: args.result.usage.outputTokens,
   });
 
-  // For now: console log. In prod: write to `architecta_llm_usage`.
-  console.log("[LLM]", {
-    workspaceId: args.input.workspaceId,
-    task: args.input.task,
-    tier: args.input.tier ?? "standard",
-    provider: args.result.provider,
-    model: args.result.model,
-    tokens: args.result.usage.totalTokens,
-    cost,
-    fallback: args.result.usedFallback ?? false,
-    latencyMs: args.result.latencyMs,
-    meta: args.input.metadata ?? {},
-    routeReason: args.routeReason,
-  });
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return;
+    }
+
+    const { error } = await supabase.from("architecta_llm_usage").insert({
+      user_id: user.id,
+      workspace_id: args.input.workspaceId === user.id ? null : args.input.workspaceId,
+      task: args.input.task,
+      tier: args.input.tier ?? "standard",
+      provider: args.result.provider,
+      model: args.result.model,
+      input_tokens: args.result.usage.inputTokens,
+      output_tokens: args.result.usage.outputTokens,
+      total_tokens: args.result.usage.totalTokens,
+      cost_usd: cost,
+      used_fallback: args.result.usedFallback ?? false,
+      latency_ms: args.result.latencyMs ?? null,
+      request_id: args.result.requestId ?? null,
+      route_reason: args.routeReason,
+      meta: args.input.metadata ?? {},
+    });
+
+    if (error) {
+      console.warn("[llm-usage] insert failed:", error.message);
+    }
+  } catch (err) {
+    console.warn(
+      "[llm-usage] unable to record call:",
+      err instanceof Error ? err.message : err
+    );
+  }
 }

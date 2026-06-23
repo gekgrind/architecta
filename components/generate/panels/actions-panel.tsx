@@ -18,11 +18,14 @@ import {
   FileDown,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { VisualAssetsCard } from "./visual-assets-card"
 
 interface ActionsPanelProps {
   hasContent: boolean
   contentScore: number | null
   content: string
+  postId?: string
+  visualPrompt?: string
 }
 
 const suggestions = [
@@ -37,7 +40,13 @@ const versions = [
   { id: 3, timestamp: "10 min ago", preview: "Here's a framework for..." },
 ]
 
-export function ActionsPanel({ hasContent, contentScore, content }: ActionsPanelProps) {
+export function ActionsPanel({
+  hasContent,
+  contentScore,
+  content,
+  postId,
+  visualPrompt,
+}: ActionsPanelProps) {
   const [copied, setCopied] = useState(false)
   const [saved, setSaved] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -145,6 +154,26 @@ export function ActionsPanel({ hasContent, contentScore, content }: ActionsPanel
           ))}
         </CardContent>
       </Card>
+
+      {/* Visual assets (image + video) */}
+      {postId ? (
+        <VisualAssetsCard
+          postId={postId}
+          defaultPrompt={(visualPrompt ?? content).slice(0, 1200)}
+        />
+      ) : (
+        <Card className="opacity-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-secondary" />
+              Visual assets
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 text-xs text-muted-foreground">
+            Generate a post first to attach an image or video.
+          </CardContent>
+        </Card>
+      )}
 
       {/* Actions */}
       <Card className={cn(!hasContent && "opacity-50")}>

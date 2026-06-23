@@ -76,11 +76,92 @@ export function validateContentStrategyInput(input: ContentStrategyInput) {
   };
 }
 
-export async function generateMockContentStrategy(
+type ContentPillarPayload = {
+  title?: unknown;
+  items?: unknown;
+};
+
+type GeneratedStrategyPayload = Partial<GeneratedContentStrategy> & {
+  contentPillars?: ContentPillarPayload[];
+};
+
+function asStrings(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((v): v is string => typeof v === "string");
+}
+
+function normalizeContentStrategy(
+  generated: GeneratedStrategyPayload,
+  input: ContentStrategyInput
+): GeneratedContentStrategy {
+  const fallback = generateFallbackContentStrategy(input);
+
+  const contentPillars =
+    Array.isArray(generated.contentPillars) && generated.contentPillars.length
+      ? generated.contentPillars.map((pillar) => ({
+          title:
+            typeof pillar?.title === "string" ? pillar.title : "Untitled pillar",
+          items: asStrings(pillar?.items),
+        }))
+      : fallback.contentPillars;
+
+  return {
+    summary:
+      typeof generated.summary === "string" && generated.summary.trim()
+        ? generated.summary
+        : fallback.summary,
+    contentPillars,
+    audienceAngles: asStrings(generated.audienceAngles).length
+      ? asStrings(generated.audienceAngles)
+      : fallback.audienceAngles,
+    contentThemes: asStrings(generated.contentThemes).length
+      ? asStrings(generated.contentThemes)
+      : fallback.contentThemes,
+    postingCadence: asStrings(generated.postingCadence).length
+      ? asStrings(generated.postingCadence)
+      : fallback.postingCadence,
+    quickWins: asStrings(generated.quickWins).length
+      ? asStrings(generated.quickWins)
+      : fallback.quickWins,
+    nextActions: asStrings(generated.nextActions).length
+      ? asStrings(generated.nextActions)
+      : fallback.nextActions,
+  };
+}
+
+export async function generateContentStrategy(
   input: ContentStrategyInput
 ): Promise<GeneratedContentStrategy> {
-  await new Promise((resolve) => setTimeout(resolve, 1100));
+  const res = await fetch("/api/strategies", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      kind: "content_strategy",
+      businessNiche: input.businessNiche,
+      targetAudience: input.targetAudience,
+      contentGoals: input.contentGoals,
+      offerProduct: input.offerProduct,
+      preferredPlatforms: input.preferredPlatforms,
+      toneBrandStyle: input.toneBrandStyle,
+    }),
+  });
 
+  const json = (await res.json().catch(() => null)) as {
+    ok?: boolean;
+    data?: { generated?: GeneratedStrategyPayload };
+    error?: { message?: string };
+  } | null;
+
+  if (!res.ok || !json?.ok || !json.data?.generated) {
+    throw new Error(json?.error?.message ?? `Strategy request failed (${res.status})`);
+  }
+
+  return normalizeContentStrategy(json.data.generated, input);
+}
+
+function generateFallbackContentStrategy(
+  input: ContentStrategyInput
+): GeneratedContentStrategy {
   const platforms =
     input.preferredPlatforms.length > 0
       ? input.preferredPlatforms

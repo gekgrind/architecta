@@ -6,6 +6,7 @@ import {
   buildSharedLoginHref,
 } from "@/lib/auth/redirects";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getArchitectaOnboardingStatus } from "@/lib/onboarding/server";
 
 export default async function HomePage() {
   const supabase = await createSupabaseServerClient();
@@ -17,11 +18,6 @@ export default async function HomePage() {
     redirect(buildSharedLoginHref(APP_HOME_PATH));
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("onboarding_complete")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  redirect(profile?.onboarding_complete ? APP_HOME_PATH : ONBOARDING_PATH);
+  const onboarding = await getArchitectaOnboardingStatus();
+  redirect(onboarding.onboardingComplete ? APP_HOME_PATH : ONBOARDING_PATH);
 }

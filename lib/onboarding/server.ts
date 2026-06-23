@@ -1,6 +1,40 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { OnboardingStepId } from "./steps";
 
+export type ArchitectaOnboardingStatus = {
+  currentStep: OnboardingStepId;
+  completedSteps: OnboardingStepId[];
+  onboardingComplete: boolean;
+  onboardingCompletedAt: string | null;
+  answers: Record<string, unknown>;
+};
+
+async function getOrCreateProfileOnboardingState(userId: string) {
+  const supabase = await createSupabaseServerClient();
+  const { data: existing, error } = await supabase
+    .from("profiles")
+    .select("id, onboarding_complete, onboarding_completed_at")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (existing) return existing;
+
+  const { data: inserted, error: insertError } = await supabase
+    .from("profiles")
+    .insert({
+      id: userId,
+      onboarding_complete: false,
+      onboarding_step: "welcome",
+    })
+    .select("id, onboarding_complete, onboarding_completed_at")
+    .single();
+
+  if (insertError) throw insertError;
+
+  return inserted;
+}
+
 /**
  * Canonical initializer for Architecta onboarding
  * - Ensures ONE onboarding_sessions row
@@ -46,6 +80,7 @@ export async function getOrCreateArchitectaOnboarding() {
         current_step: "welcome",
         completed_steps: [],
         flags: {},
+        answers: {},
         status: "in_progress",
       })
       .select("*")
@@ -90,7 +125,25 @@ export async function getOrCreateArchitectaOnboarding() {
     profile = inserted;
   }
 
+  await getOrCreateProfileOnboardingState(user.id);
+
   return { user, session, profile };
+}
+
+export async function getArchitectaOnboardingStatus(): Promise<ArchitectaOnboardingStatus> {
+  const { user, session } = await getOrCreateArchitectaOnboarding();
+  const profileState = await getOrCreateProfileOnboardingState(user.id);
+
+  return {
+    currentStep: session.current_step ?? "welcome",
+    completedSteps: Array.isArray(session.completed_steps) ? session.completed_steps : [],
+    onboardingComplete: Boolean(profileState.onboarding_complete),
+    onboardingCompletedAt: profileState.onboarding_completed_at,
+    answers:
+      session.answers && typeof session.answers === "object" && !Array.isArray(session.answers)
+        ? session.answers
+        : {},
+  };
 }
 
 /**
@@ -210,6 +263,8 @@ export async function completeArchitectaOnboarding() {
     throw new Error("Not authenticated");
   }
 
+  await getOrCreateProfileOnboardingState(user.id);
+
   // 1️⃣ Update onboarding session
   await supabase
     .from("onboarding_sessions")
@@ -225,6 +280,7 @@ export async function completeArchitectaOnboarding() {
     .from("profiles")
     .update({
       onboarding_complete: true,
+      onboarding_completed_at: new Date().toISOString(),
       onboarding_step: "complete",
     })
     .eq("id", user.id);

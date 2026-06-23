@@ -1,26 +1,41 @@
 import { apiError, apiOk } from "@/lib/api/response";
+import { getAuthenticatedUser } from "@/lib/auth/server";
 import type { StudioGraphRecord } from "@/lib/domain";
-import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  const supabase = await createSupabaseServiceClient();
+  const supabase = await createSupabaseServerClient();
+  const session = await getAuthenticatedUser(supabase);
+  if (!session) return apiError("unauthorized", "Unauthorized");
+
   const { searchParams } = new URL(req.url);
   const graphId = searchParams.get("graphId");
+  const workspaceId = searchParams.get("workspaceId");
 
-  if (!graphId) {
-    return apiError("validation_error", "graphId required");
+  let query = supabase
+    .from("studio_graphs")
+    .select("*")
+    .eq("user_id", session.user.id);
+
+  if (graphId) {
+    query = query.eq("id", graphId);
+  } else if (workspaceId) {
+    query = query.eq("workspace_id", workspaceId);
   }
 
-  const { data, error } = await supabase
-    .from("architecta_graphs")
-    .select("*")
-    .eq("id", graphId)
-    .single();
+  const { data, error } = await query
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (error) {
     return apiError("server_error", error.message);
+  }
+
+  if (!data) {
+    return apiOk({ graph: null });
   }
 
   const graph: StudioGraphRecord = {

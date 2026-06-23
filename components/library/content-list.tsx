@@ -12,7 +12,17 @@ import {
 import { StatusBadge } from "@/components/ui/status-badge"
 import { ContentTypeIcon } from "@/components/ui/content-type-icon"
 import type { ContentItem } from "@/lib/types"
-import { MoreHorizontal, Edit, Copy, Share2, Trash2, BarChart2 } from "lucide-react"
+import {
+  MoreHorizontal,
+  Edit,
+  Copy,
+  Share2,
+  Trash2,
+  BarChart2,
+  Film,
+  ImageIcon,
+  Layers,
+} from "lucide-react"
 
 interface ContentListProps {
   items: ContentItem[]
@@ -24,6 +34,35 @@ const contentTypeLabels: Record<string, string> = {
   blog: "Blog",
   email: "Email",
   ad: "Ad Copy",
+}
+
+function MediaThumbSmall({ item }: { item: ContentItem }) {
+  const media = item.media
+  if (!media) return null
+  const Icon =
+    media.kind === "image" ? ImageIcon : media.kind === "video" ? Film : Layers
+  return (
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted">
+      {media.kind === "image" && media.imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={media.imageUrl}
+          alt={media.label ?? "Generated image"}
+          className="h-full w-full object-cover"
+        />
+      ) : media.kind === "video" && media.videoUrl ? (
+        <video
+          src={media.videoUrl}
+          muted
+          playsInline
+          preload="metadata"
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <Icon className="h-4 w-4 text-muted-foreground" />
+      )}
+    </div>
+  )
 }
 
 export function ContentList({ items }: ContentListProps) {
@@ -46,6 +85,7 @@ export function ContentList({ items }: ContentListProps) {
             <TableRow key={item.id} className="group">
               <TableCell>
                 <div className="flex items-center gap-3">
+                  <MediaThumbSmall item={item} />
                   <ContentTypeIcon type={item.contentType} size={16} />
                   <div>
                     <p className="font-medium text-foreground">{item.title}</p>

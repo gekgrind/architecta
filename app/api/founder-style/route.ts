@@ -1,7 +1,7 @@
 import { apiError, apiOk, parseJsonBody } from "@/lib/api/response";
 import { getAuthenticatedUser } from "@/lib/auth/server";
 import type { FounderProfile } from "@/lib/domain";
-import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
@@ -24,7 +24,7 @@ function toFounderProfile(row: Record<string, unknown>, userId: string): Founder
 }
 
 export async function GET(req: Request) {
-  const supabase = await createSupabaseServiceClient();
+  const supabase = await createSupabaseServerClient();
   const session = await getAuthenticatedUser(supabase);
   if (!session) return apiError("unauthorized", "Unauthorized");
 
@@ -52,7 +52,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const supabase = await createSupabaseServiceClient();
+  const supabase = await createSupabaseServerClient();
   const session = await getAuthenticatedUser(supabase);
   if (!session) return apiError("unauthorized", "Unauthorized");
 

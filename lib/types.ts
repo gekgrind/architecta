@@ -3,6 +3,7 @@ export type {
   BusinessProfile,
   Campaign,
   ContentItem,
+  ContentMedia,
   ContentStatus,
   ContentType,
   CtaHint,

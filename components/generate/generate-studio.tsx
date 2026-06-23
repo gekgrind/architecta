@@ -18,11 +18,43 @@ const initialConfig: GenerationUIConfig = {
   ctaText: "",
 };
 
+const PLATFORM_BY_CONTENT_TYPE: Partial<Record<ContentType, string>> = {
+  linkedin: "linkedin",
+  tweet: "x",
+  blog: "blog",
+  email: "email",
+  ad: "linkedin",
+};
+
+function toPlatform(contentType: ContentType): string {
+  return PLATFORM_BY_CONTENT_TYPE[contentType] ?? "linkedin";
+}
+
+function formatGeneratedPost(post: {
+  hook: string | null;
+  caption: string | null;
+  body: string | null;
+  cta: string | null;
+  hashtags: string[];
+}): string {
+  const segments: string[] = [];
+  if (post.hook) segments.push(post.hook);
+  const body = post.caption || post.body;
+  if (body) segments.push(body);
+  if (post.cta) segments.push(post.cta);
+  if (post.hashtags?.length) {
+    segments.push(post.hashtags.map((h) => `#${h.replace(/^#/, "")}`).join(" "));
+  }
+  return segments.filter(Boolean).join("\n\n");
+}
+
 export function GenerateStudio() {
   const [config, setConfig] = useState<GenerationUIConfig>(initialConfig);
   const [generatedContent, setGeneratedContent] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [contentScore, setContentScore] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [postId, setPostId] = useState<string | null>(null);
 
   const updateConfig = (data: Partial<GenerationUIConfig>) => {
     setConfig((prev) => ({ ...prev, ...data }));
@@ -34,18 +66,58 @@ export function GenerateStudio() {
     setIsGenerating(true);
     setGeneratedContent("");
     setContentScore(null);
+    setError(null);
 
-    // Simulate AI generation
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      const res = await fetch("/api/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform: toPlatform(config.contentType),
+          topic: config.topic,
+          keyPoints: config.keyPoints.filter(Boolean),
+          tone: config.tone < 33 ? "casual" : config.tone > 66 ? "bold" : "balanced",
+          length: config.length,
+          includeCta: config.includeCTA,
+          ctaText: config.ctaText,
+          keywords: config.keywords,
+          generateImagePrompt: false,
+          generateVideoPrompt: false,
+        }),
+      });
 
-    const mockContent = generateMockContent(config);
-    setGeneratedContent(mockContent);
-    setContentScore(Math.floor(Math.random() * 20) + 75);
-    setIsGenerating(false);
+      const json = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        data?: {
+          post: {
+            id: string;
+            hook: string | null;
+            caption: string | null;
+            body: string | null;
+            cta: string | null;
+            hashtags: string[];
+          };
+        };
+        error?: { message?: string };
+      } | null;
+
+      if (!res.ok || !json?.ok || !json.data?.post) {
+        throw new Error(json?.error?.message ?? `Generation failed (${res.status})`);
+      }
+
+      setPostId(json.data.post.id);
+      setGeneratedContent(formatGeneratedPost(json.data.post));
+      setContentScore(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Generation failed";
+      setError(message);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleRegenerate = () => {
-    handleGenerate();
+    void handleGenerate();
   };
 
   const handleContentChange = (content: string) => {
@@ -60,118 +132,31 @@ export function GenerateStudio() {
         onGenerate={handleGenerate}
         isGenerating={isGenerating}
       />
-      <PreviewPanel
-        content={generatedContent}
-        isGenerating={isGenerating}
-        contentType={config.contentType}
-        onContentChange={handleContentChange}
-        onRegenerate={handleRegenerate}
-      />
+      <div className="flex flex-col gap-4">
+        <PreviewPanel
+          content={generatedContent}
+          isGenerating={isGenerating}
+          contentType={config.contentType}
+          onContentChange={handleContentChange}
+          onRegenerate={handleRegenerate}
+        />
+        {error && (
+          <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+      </div>
       <ActionsPanel
         hasContent={!!generatedContent}
         contentScore={contentScore}
         content={generatedContent}
+        postId={postId ?? undefined}
+        visualPrompt={
+          config.topic.trim()
+            ? `${config.topic.trim()}\n\n${generatedContent}`.trim()
+            : generatedContent
+        }
       />
     </div>
   );
-}
-
-function generateMockContent(config: GenerationUIConfig): string {
-  const templates: Partial<Record<ContentType, string>> = {
-    tweet: `The secret to ${config.topic || "success"}?
-
-It's not about working harder.
-It's about working smarter.
-
-Here's the thing most people miss:
-→ Focus on systems, not goals
-→ Build habits that compound
-→ Measure what matters
-
-What's your #1 productivity tip? 👇`,
-
-    linkedin: `I've been thinking about ${config.topic || "this topic"} a lot lately.
-
-And here's what I've realized:
-
-The most successful teams don't just work harder—they work differently.
-
-${
-  config.keyPoints
-    .filter(Boolean)
-    .map((point, i) => `${i + 1}. ${point}`)
-    .join("\n") ||
-  "1. They prioritize ruthlessly\n2. They communicate clearly\n3. They iterate quickly"
-}
-
-The bottom line? ${config.topic || "Success"} isn't about perfection. It's about progress.
-
-${
-  config.includeCTA && config.ctaText
-    ? config.ctaText
-    : "What strategies have worked for you? I'd love to hear your thoughts in the comments."
-}`,
-
-    blog: `# ${config.topic || "Untitled Post"}
-
-In today's fast-paced world, ${config.topic || "this topic"} has become more important than ever.
-
-## Why It Matters
-
-${
-  config.keyPoints
-    .filter(Boolean)
-    .map((point) => `- ${point}`)
-    .join("\n") || "- Point 1\n- Point 2\n- Point 3"
-}
-
-## Key Takeaways
-
-Consistency beats intensity every time.
-
-${
-  config.includeCTA && config.ctaText
-    ? `\n---\n\n${config.ctaText}`
-    : ""
-}`,
-
-    email: `Subject: ${config.topic || "Quick update"}
-
-Hi there,
-
-I wanted to share something that's been on my mind about ${config.topic || "this topic"}.
-
-${
-  config.keyPoints
-    .filter(Boolean)
-    .map((point) => `• ${point}`)
-    .join("\n") || "• Key insight 1\n• Key insight 2\n• Key insight 3"
-}
-
-${
-  config.includeCTA && config.ctaText
-    ? config.ctaText
-    : "Reply and let me know your thoughts!"
-}
-
-Best,
-[Your Name]`,
-
-    ad: `🎯 ${config.topic || "Transform Your Results"} 🎯
-
-Tired of ${config.keyPoints[0] || "struggling with the same problems"}?
-
-Here's how we can help:
-✅ ${config.keyPoints[0] || "Benefit 1"}
-✅ ${config.keyPoints[1] || "Benefit 2"}
-✅ ${config.keyPoints[2] || "Benefit 3"}
-
-${
-  config.includeCTA && config.ctaText
-    ? config.ctaText
-    : "Click below to get started →"
-}`,
-  };
-
-  return templates[config.contentType] ?? templates.linkedin ?? "";
 }

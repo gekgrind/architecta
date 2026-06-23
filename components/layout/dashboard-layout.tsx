@@ -16,7 +16,7 @@ export function DashboardLayout({ children, breadcrumbs }: DashboardLayoutProps)
     <div className="relative min-h-screen overflow-hidden bg-[#041C3B]">
       <BlueprintBackground />
       <Sidebar />
-      <div className="relative z-10 lg:pl-60">
+      <div className="relative z-10 lg:pl-20">
         <Header breadcrumbs={breadcrumbs} />
         <main className="p-6">
           <div className="mx-auto max-w-[1400px]">{children}</div>

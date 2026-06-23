@@ -41,7 +41,7 @@ export function ArchitectaDashboard({ identity, preview = false }: ArchitectaDas
         </div>
       ) : null}
 
-      <main className="relative z-10 min-h-screen px-4 pb-32 pt-28 xl:pl-72 xl:pr-8">
+      <main className="relative z-10 min-h-screen px-4 pb-32 pt-28 xl:pl-24 xl:pr-8">
         <div className="mx-auto max-w-7xl space-y-12">
           <motion.div
             initial={shouldReduceMotion ? false : { y: 30, opacity: 0 }}

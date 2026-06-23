@@ -31,7 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   contentStrategyPlatforms,
-  generateMockContentStrategy,
+  generateContentStrategy,
   validateContentStrategyInput,
   type ContentStrategyInput,
   type ContentStrategyPlatform,
@@ -111,7 +111,7 @@ export function ContentStrategyStudio() {
     setStrategy(null);
 
     try {
-      const generated = await generateMockContentStrategy(input);
+      const generated = await generateContentStrategy(input);
       setStrategy(generated);
     } catch (err) {
       const message =
