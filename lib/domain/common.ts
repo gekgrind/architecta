@@ -6,6 +6,7 @@ export type ApiErrorCode =
   | "unauthorized"
   | "not_found"
   | "validation_error"
+  | "rate_limited"
   | "upstream_error"
   | "server_error";
 

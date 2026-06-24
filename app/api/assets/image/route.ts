@@ -2,6 +2,7 @@ import { apiError, apiOk, parseJsonBody } from "@/lib/api/response";
 import { getAuthenticatedUser } from "@/lib/auth/server";
 import { generateImage } from "@/lib/ai/llm/providers/openai-images";
 import { getUserAiPreference } from "@/lib/ai/llm/preferences";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/ratelimit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { imageGenerateInputSchema } from "@/lib/validation";
 
@@ -18,6 +19,9 @@ export async function POST(req: Request) {
   const supabase = await createSupabaseServerClient();
   const session = await getAuthenticatedUser(supabase);
   if (!session) return apiError("unauthorized", "Unauthorized");
+
+  const limited = await enforceRateLimit(session.user.id, RATE_LIMITS.imageGenerate);
+  if (limited) return limited;
 
   const body = await parseJsonBody<unknown>(req);
   const parsed = imageGenerateInputSchema.safeParse(body);

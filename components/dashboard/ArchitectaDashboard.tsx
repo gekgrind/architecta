@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Zap } from "lucide-react";
 
 import { ActionQueue } from "@/components/dashboard/ActionQueue";
+import { AiUsageCard } from "@/components/dashboard/AiUsageCard";
 import { BlueprintBackground } from "@/components/dashboard/BlueprintBackground";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { DashboardTopBar } from "@/components/dashboard/DashboardTopBar";
@@ -101,6 +102,15 @@ export function ArchitectaDashboard({ identity, preview = false }: ArchitectaDas
           >
             <StrategicOverview />
             <ActionQueue />
+          </motion.div>
+
+          <motion.div
+            initial={shouldReduceMotion ? false : { y: 48, opacity: 0 }}
+            whileInView={shouldReduceMotion ? undefined : { y: 0, opacity: 1 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.55, ease: "easeOut" }}
+          >
+            <AiUsageCard />
           </motion.div>
 
           <IntelligencePanel />

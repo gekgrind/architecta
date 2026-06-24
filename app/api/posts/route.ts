@@ -2,6 +2,7 @@ import { runGateway } from "@/lib/ai/llm/run";
 import { buildPostUserPrompt, parsePostResponse } from "@/lib/ai/llm/prompts/post";
 import { apiError, apiOk, parseJsonBody } from "@/lib/api/response";
 import { getAuthenticatedUser } from "@/lib/auth/server";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/ratelimit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   postGenerateInputSchema,
@@ -101,6 +102,9 @@ export async function POST(req: Request) {
   const supabase = await createSupabaseServerClient();
   const session = await getAuthenticatedUser(supabase);
   if (!session) return apiError("unauthorized", "Unauthorized");
+
+  const limited = await enforceRateLimit(session.user.id, RATE_LIMITS.postGenerate);
+  if (limited) return limited;
 
   const body = await parseJsonBody<unknown>(req);
   const parsed = postGenerateInputSchema.safeParse(body);

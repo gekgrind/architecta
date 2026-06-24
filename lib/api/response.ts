@@ -6,6 +6,7 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   unauthorized: 401,
   not_found: 404,
   validation_error: 422,
+  rate_limited: 429,
   upstream_error: 502,
   server_error: 500,
 };

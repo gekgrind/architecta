@@ -9,18 +9,22 @@ import { StrategyEngineWorkflow } from "@/components/strategy-engine/strategy-en
 import { useAuthIdentity } from "@/hooks/use-auth-identity";
 
 export function StrategyEngineShell() {
-  const { avatarUrl, displayName, loading, workspaceName } = useAuthIdentity();
+  const { avatarUrl, displayName, loading, title, user, workspaceName } =
+    useAuthIdentity();
   const shouldReduceMotion = useReducedMotion();
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#041C3B] font-[var(--font-inter)] text-white">
       <BlueprintBackground />
-      <DashboardSidebar />
-      <DashboardTopBar
-        avatarUrl={avatarUrl}
-        displayName={loading ? "Founder" : displayName}
-        workspaceName={workspaceName ?? "Owner & Architect"}
+      <DashboardSidebar
+        user={{
+          avatarUrl,
+          email: user?.email ?? null,
+          fullName: loading ? "Founder" : displayName,
+          title: loading ? "Founder" : title ?? workspaceName ?? "Owner & Architect",
+        }}
       />
+      <DashboardTopBar />
 
       <main className="relative z-10 min-h-screen px-4 pb-24 pt-28 xl:pl-24 xl:pr-8">
         <motion.div
