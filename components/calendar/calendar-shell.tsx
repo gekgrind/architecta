@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, CheckCircle2, Loader2, Trash2 } from "lucide-react";
+import { CalendarDays, CheckCircle2, Loader2, Send, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -59,6 +59,7 @@ export function CalendarShell() {
   const [items, setItems] = useState<CalendarItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [scheduling, setScheduling] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState<string | null>(null);
   const [pickerWhen, setPickerWhen] = useState(defaultScheduleTime());
   const [error, setError] = useState<string | null>(null);
@@ -146,6 +147,28 @@ export function CalendarShell() {
     }
   }
 
+  async function publishNow(item: CalendarItem) {
+    if (!item.postId) return;
+    setPublishing(item.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/posts/${item.postId}/publish`, {
+        method: "POST",
+      });
+      const json = (await res.json().catch(() => null)) as
+        | { ok?: boolean; error?: { message?: string } }
+        | null;
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error?.message ?? "Publish failed");
+      }
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Publish failed");
+    } finally {
+      setPublishing(null);
+    }
+  }
+
   async function deleteItem(id: string) {
     setError(null);
     try {
@@ -177,7 +200,7 @@ export function CalendarShell() {
       <div>
         <h1 className="text-2xl font-bold text-foreground">Calendar</h1>
         <p className="text-sm text-muted-foreground">
-          Schedule draft posts and track what's going out and when.
+          Schedule draft posts and track what&apos;s going out and when.
         </p>
       </div>
 
@@ -194,7 +217,7 @@ export function CalendarShell() {
               Drafts ready to schedule
             </CardTitle>
             <CardDescription>
-              Saved posts that don't have a slot yet.
+              Saved posts that don&apos;t have a slot yet.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -332,6 +355,22 @@ export function CalendarShell() {
                             <SelectItem value="published">Published</SelectItem>
                           </SelectContent>
                         </Select>
+                        {item.postId && item.status !== "published" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => publishNow(item)}
+                            disabled={publishing === item.id}
+                            className="gap-1"
+                          >
+                            {publishing === item.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Send className="h-3 w-3" />
+                            )}
+                            Publish
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="ghost"
