@@ -2,12 +2,14 @@ import "server-only";
 
 import { linkedinAdapter } from "./adapters/linkedin";
 import { facebookAdapter, instagramAdapter } from "./adapters/stub";
+import { threadsAdapter } from "./adapters/threads";
 import type { PlatformId, PublishAdapter } from "./adapters/types";
 
 const ADAPTERS: Record<PlatformId, PublishAdapter> = {
   linkedin: linkedinAdapter,
   instagram: instagramAdapter,
   facebook: facebookAdapter,
+  threads: threadsAdapter,
 };
 
 export const SUPPORTED_PLATFORMS = Object.keys(ADAPTERS) as PlatformId[];

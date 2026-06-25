@@ -26,6 +26,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   linkedin: "LinkedIn",
   instagram: "Instagram",
   facebook: "Facebook",
+  threads: "Threads",
 };
 
 export function PlatformConnections() {

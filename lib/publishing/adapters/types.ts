@@ -1,6 +1,6 @@
 import "server-only";
 
-export type PlatformId = "linkedin" | "instagram" | "facebook";
+export type PlatformId = "linkedin" | "instagram" | "facebook" | "threads";
 
 export type OAuthTokens = {
   accessToken: string;
