@@ -1,0 +1,32 @@
+name: Publish scheduled posts
+
+# Drives the Architecta publish worker on a recurring schedule. Free on GitHub
+# Actions and decoupled from the hosting plan. Configure two repo secrets:
+#   CRON_PUBLISH_URL  e.g. https://architecta.entrepreneuria.io/api/cron/publish
+#   CRON_SECRET       must match the deployed CRON_SECRET env var
+on:
+  schedule:
+    - cron: "*/5 * * * *" # every 5 minutes
+  workflow_dispatch: {} # allow manual runs from the Actions tab
+
+concurrency:
+  group: publish-cron
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger publish worker
+        env:
+          PUBLISH_URL: ${{ secrets.CRON_PUBLISH_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$PUBLISH_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "CRON_PUBLISH_URL and CRON_SECRET repo secrets must be set." >&2
+            exit 1
+          fi
+          curl -fsS -X POST "$PUBLISH_URL" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Content-Type: application/json" \
+            --max-time 290

@@ -78,10 +78,10 @@ export function CalendarShell() {
         | { ok?: boolean; data?: { items: CalendarItem[] }; error?: { message?: string } }
         | null;
       if (!postsRes.ok || !postsJson?.ok) {
-        throw new Error(postsJson?.error?.message ?? "Couldn't load posts");
+        throw new Error(postsJson?.error?.message ?? "Could not load posts");
       }
       if (!itemsRes.ok || !itemsJson?.ok) {
-        throw new Error(itemsJson?.error?.message ?? "Couldn't load calendar");
+        throw new Error(itemsJson?.error?.message ?? "Could not load calendar");
       }
       setPosts(postsJson.data?.posts ?? []);
       setItems(itemsJson.data?.items ?? []);

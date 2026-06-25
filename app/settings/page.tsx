@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Building2, Settings, User } from "lucide-react";
+import { Building2, Settings, Share2, User } from "lucide-react";
 
 import { AiProviderSettings } from "@/components/settings/AiProviderSettings";
+import { PlatformConnections } from "@/components/settings/PlatformConnections";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { useAuthIdentity } from "@/hooks/use-auth-identity";
@@ -130,6 +131,24 @@ export default function SettingsPage() {
           </div>
 
           <AiProviderSettings />
+        </section>
+
+        <section className="rounded-xl border border-border bg-card p-6">
+          <div className="mb-6 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Share2 className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">
+                Connected accounts
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Link social platforms to publish and schedule posts directly.
+              </p>
+            </div>
+          </div>
+
+          <PlatformConnections />
         </section>
       </div>
     </DashboardLayout>

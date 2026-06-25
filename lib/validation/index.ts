@@ -6,3 +6,4 @@ export * from "./post";
 export * from "./campaign";
 export * from "./calendar";
 export * from "./asset";
+export * from "./publishing";

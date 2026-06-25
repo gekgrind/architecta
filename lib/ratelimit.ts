@@ -117,4 +117,5 @@ export const RATE_LIMITS = {
   campaignGenerate: { action: "campaigns.generate", limit: 4, windowSeconds: 60 },
   imageGenerate: { action: "assets.image", limit: 10, windowSeconds: 60 },
   videoGenerate: { action: "assets.video", limit: 5, windowSeconds: 60 },
+  publish: { action: "posts.publish", limit: 10, windowSeconds: 60 },
 } as const satisfies Record<string, RateLimitRule>;
