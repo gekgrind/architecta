@@ -10,7 +10,8 @@ import {
 } from "./types";
 
 // LinkedIn versioned REST API. Bump as LinkedIn deprecates versions.
-const LINKEDIN_VERSION = "202405";
+// (202405 was retired by LinkedIn — it returns 426 NONEXISTENT_VERSION.)
+const LINKEDIN_VERSION = "202605";
 const AUTH_URL = "https://www.linkedin.com/oauth/v2/authorization";
 const TOKEN_URL = "https://www.linkedin.com/oauth/v2/accessToken";
 const USERINFO_URL = "https://api.linkedin.com/v2/userinfo";
