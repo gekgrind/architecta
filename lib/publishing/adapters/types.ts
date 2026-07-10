@@ -1,6 +1,14 @@
 import "server-only";
 
-export type PlatformId = "linkedin" | "instagram" | "facebook" | "threads";
+export type PlatformId =
+  | "linkedin"
+  | "instagram"
+  | "facebook"
+  | "threads"
+  | "x"
+  | "pinterest"
+  | "youtube"
+  | "tiktok";
 
 export type OAuthTokens = {
   accessToken: string;
@@ -22,6 +30,8 @@ export type PublishContext = {
   text: string;
   /** Signed URL to an image to attach, if any. */
   imageUrl?: string | null;
+  /** Signed URL to a video to attach, if any (required by video-only platforms). */
+  videoUrl?: string | null;
 };
 
 export type PublishResult = {
@@ -35,7 +45,8 @@ export type PublishAdapter = {
   /** False for stub adapters that can OAuth-shape but not yet post. */
   implemented: boolean;
   buildAuthUrl(args: { state: string; redirectUri: string }): string;
-  exchangeCode(args: { code: string; redirectUri: string }): Promise<OAuthTokens>;
+  /** `state` is the same value round-tripped from buildAuthUrl — PKCE adapters re-derive their verifier from it. */
+  exchangeCode(args: { code: string; redirectUri: string; state: string }): Promise<OAuthTokens>;
   getAccountIdentity(tokens: OAuthTokens): Promise<AccountIdentity>;
   publish(ctx: PublishContext): Promise<PublishResult>;
 };

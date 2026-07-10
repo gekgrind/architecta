@@ -26,7 +26,7 @@ export async function POST(_req: Request, ctx: RouteContext) {
   const { data: post, error: postError } = await supabase
     .from("architecta_posts")
     .select(
-      "id, user_id, platform, title, hook, caption, body, cta, hashtags, image_asset_id, meta"
+      "id, user_id, platform, title, hook, caption, body, cta, hashtags, image_asset_id, video_asset_id, meta"
     )
     .eq("user_id", session.user.id)
     .eq("id", id)

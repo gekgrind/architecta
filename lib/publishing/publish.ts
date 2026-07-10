@@ -17,6 +17,7 @@ export type PostForPublish = {
   cta: string | null;
   hashtags: string[] | null;
   image_asset_id: string | null;
+  video_asset_id: string | null;
   meta: Record<string, unknown> | null;
 };
 
@@ -37,16 +38,17 @@ export function buildPostText(post: PostForPublish): string {
   return segments.filter(Boolean).join("\n\n").trim();
 }
 
-async function resolveImageUrl(
+async function resolveAssetUrl(
   supabase: SupabaseClient,
-  post: PostForPublish
+  userId: string,
+  assetId: string | null
 ): Promise<string | null> {
-  if (!post.image_asset_id) return null;
+  if (!assetId) return null;
   const { data } = await supabase
     .from("architecta_generated_assets")
     .select("storage_bucket, storage_path, external_url")
-    .eq("user_id", post.user_id)
-    .eq("id", post.image_asset_id)
+    .eq("user_id", userId)
+    .eq("id", assetId)
     .maybeSingle();
   if (!data) return null;
   if (data.external_url) return data.external_url as string;
@@ -84,13 +86,15 @@ export async function publishPost(args: {
     const text = buildPostText(post);
     if (!text) throw new Error("Post has no content to publish");
 
-    const imageUrl = await resolveImageUrl(supabase, post);
+    const imageUrl = await resolveAssetUrl(supabase, post.user_id, post.image_asset_id);
+    const videoUrl = await resolveAssetUrl(supabase, post.user_id, post.video_asset_id);
 
     const result = await adapter.publish({
       accessToken,
       externalAccountId: connection.external_account_id,
       text,
       imageUrl,
+      videoUrl,
     });
 
     const nowIso = new Date().toISOString();

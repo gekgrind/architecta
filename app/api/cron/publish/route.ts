@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   const { data: duePosts, error } = await supabase
     .from("architecta_posts")
     .select(
-      "id, user_id, platform, title, hook, caption, body, cta, hashtags, image_asset_id, meta"
+      "id, user_id, platform, title, hook, caption, body, cta, hashtags, image_asset_id, video_asset_id, meta"
     )
     .eq("status", "scheduled")
     .lte("scheduled_for", nowIso)

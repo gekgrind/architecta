@@ -44,7 +44,11 @@ describe("facebookAdapter.exchangeCode", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const tokens = await facebookAdapter.exchangeCode({ code: "abc", redirectUri: REDIRECT });
+    const tokens = await facebookAdapter.exchangeCode({
+      code: "abc",
+      redirectUri: REDIRECT,
+      state: "facebook.nonce",
+    });
     expect(tokens.accessToken).toBe("long-lived");
     expect(tokens.expiresAt).toBeTruthy();
   });
@@ -59,7 +63,7 @@ describe("facebookAdapter.exchangeCode", () => {
       }))
     );
     await expect(
-      facebookAdapter.exchangeCode({ code: "bad", redirectUri: REDIRECT })
+      facebookAdapter.exchangeCode({ code: "bad", redirectUri: REDIRECT, state: "s" })
     ).rejects.toThrow(/bad code/);
   });
 });

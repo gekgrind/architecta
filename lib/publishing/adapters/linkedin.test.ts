@@ -51,7 +51,11 @@ describe("linkedinAdapter.exchangeCode", () => {
         }),
       }))
     );
-    const tokens = await linkedinAdapter.exchangeCode({ code: "abc", redirectUri: REDIRECT });
+    const tokens = await linkedinAdapter.exchangeCode({
+      code: "abc",
+      redirectUri: REDIRECT,
+      state: "linkedin.nonce",
+    });
     expect(tokens.accessToken).toBe("tok-1");
     expect(tokens.scopes).toContain("w_member_social");
     expect(tokens.expiresAt).toBeTruthy();
@@ -67,7 +71,7 @@ describe("linkedinAdapter.exchangeCode", () => {
       }))
     );
     await expect(
-      linkedinAdapter.exchangeCode({ code: "bad", redirectUri: REDIRECT })
+      linkedinAdapter.exchangeCode({ code: "bad", redirectUri: REDIRECT, state: "linkedin.nonce" })
     ).rejects.toThrow(/bad code/);
   });
 });

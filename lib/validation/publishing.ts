@@ -5,6 +5,10 @@ export const connectablePlatformSchema = z.enum([
   "instagram",
   "facebook",
   "threads",
+  "x",
+  "pinterest",
+  "youtube",
+  "tiktok",
 ]);
 
 export const publishInputSchema = z.object({

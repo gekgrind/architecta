@@ -52,7 +52,7 @@ export async function GET(req: Request, ctx: RouteContext) {
   const adapter = getAdapter(platform);
   try {
     const redirectUri = redirectUriFor(platform);
-    const tokens = await adapter.exchangeCode({ code, redirectUri });
+    const tokens = await adapter.exchangeCode({ code, redirectUri, state });
     const identity = await adapter.getAccountIdentity(tokens);
     await upsertConnection(supabase, session.user.id, {
       platform,

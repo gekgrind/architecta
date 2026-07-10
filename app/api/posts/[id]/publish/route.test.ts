@@ -52,6 +52,7 @@ const LINKEDIN_POST = {
   cta: null,
   hashtags: [],
   image_asset_id: null,
+  video_asset_id: null,
   meta: {},
 };
 
