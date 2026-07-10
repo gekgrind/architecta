@@ -1,7 +1,8 @@
 import "server-only";
 
+import { facebookAdapter } from "./adapters/facebook";
+import { instagramAdapter } from "./adapters/instagram";
 import { linkedinAdapter } from "./adapters/linkedin";
-import { facebookAdapter, instagramAdapter } from "./adapters/stub";
 import { threadsAdapter } from "./adapters/threads";
 import type { PlatformId, PublishAdapter } from "./adapters/types";
 
