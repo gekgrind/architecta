@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, CheckCircle2, Loader2, Send, Trash2 } from "lucide-react";
+import { CalendarDays, CheckCircle2, Loader2, Newspaper, Send, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { DestinationPublisher } from "@/components/integrations/DestinationPublisher";
 import {
   Card,
   CardContent,
@@ -61,6 +62,8 @@ export function CalendarShell() {
   const [scheduling, setScheduling] = useState<string | null>(null);
   const [publishing, setPublishing] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState<string | null>(null);
+  // Which draft has the blog/email destination panel expanded.
+  const [publisherOpen, setPublisherOpen] = useState<string | null>(null);
   const [pickerWhen, setPickerWhen] = useState(defaultScheduleTime());
   const [error, setError] = useState<string | null>(null);
 
@@ -275,18 +278,37 @@ export function CalendarShell() {
                         </Button>
                       </div>
                     ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setPickerOpen(p.id);
-                          setPickerWhen(defaultScheduleTime());
-                        }}
-                      >
-                        Schedule
-                      </Button>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="gap-1"
+                          onClick={() =>
+                            setPublisherOpen(publisherOpen === p.id ? null : p.id)
+                          }
+                        >
+                          <Newspaper className="h-3 w-3" />
+                          Blog / Email
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setPickerOpen(p.id);
+                            setPickerWhen(defaultScheduleTime());
+                          }}
+                        >
+                          Schedule
+                        </Button>
+                      </div>
                     )}
                   </div>
+
+                  {publisherOpen === p.id && (
+                    <div className="mt-3 border-t border-border pt-3">
+                      <DestinationPublisher postId={p.id} />
+                    </div>
+                  )}
                 </div>
               ))
             )}

@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Building2, Settings, Share2, User } from "lucide-react";
+import { Building2, Newspaper, Settings, Share2, User } from "lucide-react";
 
 import { AiProviderSettings } from "@/components/settings/AiProviderSettings";
+import { BlogEmailConnections } from "@/components/settings/BlogEmailConnections";
 import { PlatformConnections } from "@/components/settings/PlatformConnections";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
@@ -149,6 +150,24 @@ export default function SettingsPage() {
           </div>
 
           <PlatformConnections />
+        </section>
+
+        <section className="rounded-xl border border-border bg-card p-6">
+          <div className="mb-6 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Newspaper className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">
+                Blog &amp; Email
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Connect your own blog and email tools to draft content directly into them.
+              </p>
+            </div>
+          </div>
+
+          <BlogEmailConnections />
         </section>
       </div>
     </DashboardLayout>
