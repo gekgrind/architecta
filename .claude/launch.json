@@ -1,0 +1,67 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "entrepreneuria-404-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:\\DevProjects\\entrepreneuria",
+        "run",
+        "dev",
+        "--",
+        "-p",
+        "3010"
+      ],
+      "port": 3010
+    },
+    {
+      "name": "prospra-404-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:\\DevProjects\\prospra",
+        "run",
+        "dev",
+        "--",
+        "-p",
+        "3011"
+      ],
+      "port": 3011
+    },
+    {
+      "name": "architecta-404-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "-p", "3012"],
+      "port": 3012
+    },
+    {
+      "name": "directorium-404-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:\\DevProjects\\directorium",
+        "run",
+        "dev",
+        "--",
+        "-p",
+        "3013"
+      ],
+      "port": 3013
+    },
+    {
+      "name": "synceri-404-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:\\DevProjects\\synceri",
+        "run",
+        "dev",
+        "--",
+        "-p",
+        "3014"
+      ],
+      "port": 3014
+    }
+  ]
+}
