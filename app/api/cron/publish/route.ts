@@ -6,7 +6,7 @@ import {
   type ConnectionRow,
 } from "@/lib/publishing/connections";
 import { isPlatformId } from "@/lib/publishing/registry";
-import { publishPost, type PostForPublish } from "@/lib/publishing/publish";
+import { publishPost, sweepStalePublishing, type PostForPublish } from "@/lib/publishing/publish";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -33,10 +33,13 @@ export async function POST(req: Request) {
   const supabase = await createSupabaseServiceClient();
   const nowIso = new Date().toISOString();
 
+  // Fail (don't retry) posts whose worker died mid-publish, so they can't double-post.
+  const stale = await sweepStalePublishing(supabase);
+
   const { data: duePosts, error } = await supabase
     .from("architecta_posts")
     .select(
-      "id, user_id, platform, title, hook, caption, body, cta, hashtags, image_asset_id, video_asset_id, meta"
+      "id, user_id, platform, title, hook, caption, body, cta, hashtags, image_asset_id, video_asset_id, meta, publish_attempts"
     )
     .eq("status", "scheduled")
     .lte("scheduled_for", nowIso)
@@ -64,20 +67,18 @@ export async function POST(req: Request) {
       .eq("platform", post.platform)
       .maybeSingle();
 
-    if (!connection || (connection as ConnectionRow).status !== "connected") {
-      skipped += 1;
-      continue;
-    }
-
+    // A missing/expired connection is handled inside publishPost: the post is
+    // marked failed with a reconnect message instead of silently staying scheduled.
     const outcome = await publishPost({
       supabase,
       post,
-      connection: connection as ConnectionRow,
+      connection: (connection as ConnectionRow | null) ?? null,
       trigger: "scheduled",
     });
     if (outcome.ok) published += 1;
+    else if (outcome.code === "already_publishing") skipped += 1;
     else failed += 1;
   }
 
-  return apiOk({ scanned: duePosts?.length ?? 0, published, failed, skipped });
+  return apiOk({ scanned: duePosts?.length ?? 0, published, failed, skipped, stale });
 }

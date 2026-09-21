@@ -28,6 +28,7 @@ const statusOptions: { value: ContentStatus; label: string }[] = [
   { value: "draft", label: "Draft" },
   { value: "scheduled", label: "Scheduled" },
   { value: "published", label: "Published" },
+  { value: "failed", label: "Failed" },
   { value: "archived", label: "Archived" },
 ]
 

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { apiError } from "@/lib/api/response";
 import { getAuthenticatedUser } from "@/lib/auth/server";
+import { logCallbackFailure, type CallbackStage } from "@/lib/publishing/diagnostics";
 import { redirectUriFor, upsertConnection } from "@/lib/publishing/connections";
 import { getAdapter, isPlatformId } from "@/lib/publishing/registry";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -43,23 +44,31 @@ export async function GET(req: Request, ctx: RouteContext) {
   cookieStore.delete(STATE_COOKIE);
 
   if (oauthError || !code) {
+    logCallbackFailure(platform, oauthError ? "provider_error" : "missing_code", {
+      providerError: oauthError,
+    });
     return settingsRedirect(req, "error", platform);
   }
   if (!state || !expectedState || state !== expectedState) {
+    logCallbackFailure(platform, "state_mismatch");
     return settingsRedirect(req, "error", platform);
   }
 
   const adapter = getAdapter(platform);
+  let stage: CallbackStage = "token_exchange";
   try {
     const redirectUri = redirectUriFor(platform);
     const tokens = await adapter.exchangeCode({ code, redirectUri, state });
+    stage = "identity_lookup";
     const identity = await adapter.getAccountIdentity(tokens);
+    stage = "save_connection";
     await upsertConnection(supabase, session.user.id, {
       platform,
       identity,
       tokens,
     });
-  } catch {
+  } catch (err) {
+    logCallbackFailure(platform, stage, { err });
     return settingsRedirect(req, "error", platform);
   }
 

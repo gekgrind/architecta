@@ -3,12 +3,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   createSupabaseServiceClient: vi.fn(),
   publishPost: vi.fn(),
+  sweepStalePublishing: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/service", () => ({
   createSupabaseServiceClient: h.createSupabaseServiceClient,
 }));
-vi.mock("@/lib/publishing/publish", () => ({ publishPost: h.publishPost }));
+vi.mock("@/lib/publishing/publish", () => ({
+  publishPost: h.publishPost,
+  sweepStalePublishing: h.sweepStalePublishing,
+}));
 
 import { POST } from "./route";
 
@@ -62,6 +66,7 @@ const DUE_LINKEDIN = {
 beforeEach(() => {
   Object.values(h).forEach((m) => "mockReset" in m && m.mockReset());
   process.env.CRON_SECRET = SECRET;
+  h.sweepStalePublishing.mockResolvedValue(0);
 });
 
 describe("POST /api/cron/publish", () => {
@@ -96,18 +101,45 @@ describe("POST /api/cron/publish", () => {
     expect(h.publishPost.mock.calls[0][0].trigger).toBe("scheduled");
   });
 
-  it("skips a due post with no connection", async () => {
+  it("hands a post with no connection to publishPost so it fails visibly instead of staying scheduled", async () => {
     h.createSupabaseServiceClient.mockResolvedValue(
       makeSupabase({
         duePosts: [DUE_LINKEDIN],
         connectionByUser: { data: null, error: null },
       })
     );
+    h.publishPost.mockResolvedValue({
+      ok: false,
+      error: "Connect your LinkedIn account to publish this post.",
+      code: "not_connected",
+      retryable: false,
+    });
     const res = await POST(req(SECRET));
-    const body = (await res.json()) as { data: { published: number; skipped: number } };
-    expect(body.data.published).toBe(0);
-    expect(body.data.skipped).toBe(1);
-    expect(h.publishPost).not.toHaveBeenCalled();
+    const body = (await res.json()) as { data: { failed: number; skipped: number } };
+    expect(body.data.failed).toBe(1);
+    expect(h.publishPost.mock.calls[0][0].connection).toBeNull();
+  });
+
+  it("counts a post already claimed elsewhere as skipped", async () => {
+    h.createSupabaseServiceClient.mockResolvedValue(makeSupabase({ duePosts: [DUE_LINKEDIN] }));
+    h.publishPost.mockResolvedValue({
+      ok: false,
+      error: "already",
+      code: "already_publishing",
+      retryable: false,
+    });
+    const body = (await (await POST(req(SECRET))).json()) as {
+      data: { failed: number; skipped: number };
+    };
+    expect(body.data).toMatchObject({ failed: 0, skipped: 1 });
+  });
+
+  it("sweeps stale publishing posts first", async () => {
+    h.createSupabaseServiceClient.mockResolvedValue(makeSupabase({ duePosts: [] }));
+    h.sweepStalePublishing.mockResolvedValue(2);
+    const body = (await (await POST(req(SECRET))).json()) as { data: { stale: number } };
+    expect(h.sweepStalePublishing).toHaveBeenCalledOnce();
+    expect(body.data.stale).toBe(2);
   });
 
   it("skips a due post on a non-connectable platform", async () => {

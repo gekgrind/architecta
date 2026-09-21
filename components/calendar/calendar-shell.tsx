@@ -38,6 +38,10 @@ type CalendarItem = {
   scheduledFor: string;
   status: string;
   notes: string | null;
+  /** The linked post's publishing state (calendar status alone can't show failures). */
+  postStatus?: string | null;
+  publishError?: string | null;
+  publishErrorCode?: string | null;
 };
 
 function startOfDayKey(iso: string): string {
@@ -377,7 +381,7 @@ export function CalendarShell() {
                             <SelectItem value="published">Published</SelectItem>
                           </SelectContent>
                         </Select>
-                        {item.postId && item.status !== "published" && (
+                        {item.postId && item.status !== "published" && item.postStatus !== "publishing" && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -390,7 +394,7 @@ export function CalendarShell() {
                             ) : (
                               <Send className="h-3 w-3" />
                             )}
-                            Publish
+                            {item.postStatus === "failed" ? "Retry" : "Publish"}
                           </Button>
                         )}
                         <Button
@@ -402,6 +406,25 @@ export function CalendarShell() {
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
+                      {item.postStatus === "publishing" && (
+                        <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Publishing…
+                        </p>
+                      )}
+                      {item.postStatus === "failed" && (
+                        <div className="mt-2 rounded-md border border-destructive/20 bg-destructive/10 p-2 text-xs text-destructive">
+                          <p>{item.publishError ?? "Publishing failed. Please try again."}</p>
+                          {item.publishErrorCode === "reconnect_required" && (
+                            <a
+                              href={`/api/connections/${item.platform}/start`}
+                              className="mt-1 inline-block font-medium underline"
+                            >
+                              Reconnect {item.platform}
+                            </a>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
