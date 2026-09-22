@@ -144,14 +144,32 @@ function classifyError(err: unknown, platform: string): Failure {
       raw,
     };
   }
-  // Only failures where the platform can't have created the post are auto-retried:
-  // 503 (service unavailable) and pre-response network errors.
-  const retryable =
-    (err instanceof PublishHttpError && err.status === 503) || err instanceof TypeError;
+  // A 503 is a well-formed HTTP response: the platform's own infrastructure told
+  // us it never processed the request, so it's provably safe to retry.
+  if (err instanceof PublishHttpError && err.status === 503) {
+    return {
+      code: "platform_error",
+      userMessage: `${name} couldn't publish this post. Please try again, or edit the post and retry.`,
+      retryable: true,
+      raw,
+    };
+  }
+  // A bare network failure (fetch rejecting with TypeError) gives no proof the
+  // platform never received the request — the response may have been lost after
+  // it was accepted. Auto-retrying a non-idempotent publish here could double-post,
+  // so this is an ambiguous outcome, not a safe retry.
+  if (err instanceof TypeError) {
+    return {
+      code: "outcome_unknown",
+      userMessage: `We couldn't confirm whether this reached ${name}. Check the platform before retrying to avoid a duplicate.`,
+      retryable: false,
+      raw,
+    };
+  }
   return {
     code: "platform_error",
     userMessage: `${name} couldn't publish this post. Please try again, or edit the post and retry.`,
-    retryable,
+    retryable: false,
     raw,
   };
 }
@@ -183,13 +201,14 @@ async function markConnectionExpired(supabase: SupabaseClient, connection: Conne
 export async function claimPost(
   supabase: SupabaseClient,
   post: PostForPublish,
-  trigger: "manual" | "scheduled"
+  trigger: "manual" | "scheduled",
+  claimedAt: string = new Date().toISOString()
 ): Promise<boolean> {
   const { data, error } = await supabase
     .from("architecta_posts")
     .update({
       status: "publishing",
-      publish_claimed_at: new Date().toISOString(),
+      publish_claimed_at: claimedAt,
       // A user-initiated publish starts a fresh attempt budget.
       publish_attempts: trigger === "manual" ? 1 : (post.publish_attempts ?? 0) + 1,
       publish_error: null,
@@ -247,8 +266,9 @@ async function failPost(args: {
   trigger: "manual" | "scheduled";
   failure: Failure;
   attempt: number;
+  claimedAt: string;
 }): Promise<PublishOutcome> {
-  const { supabase, post, platform, trigger, failure, attempt } = args;
+  const { supabase, post, platform, trigger, failure, attempt, claimedAt } = args;
   const willRetry =
     failure.retryable && trigger === "scheduled" && attempt < MAX_PUBLISH_ATTEMPTS;
 
@@ -270,7 +290,7 @@ async function failPost(args: {
     willRetry,
   });
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("architecta_posts")
     .update({
       status: willRetry ? "scheduled" : "failed",
@@ -279,10 +299,18 @@ async function failPost(args: {
     })
     .eq("user_id", post.user_id)
     .eq("id", post.id)
-    .eq("status", "publishing");
+    .eq("status", "publishing")
+    // Fences this write to the claim that started this attempt: if the post was
+    // swept as stale and re-claimed by another worker in the meantime, this
+    // update must not stomp on that newer claim's state.
+    .eq("publish_claimed_at", claimedAt)
+    .select("id");
   if (error) {
     // Left in `publishing`; the stale sweep will fail it rather than re-send it.
     logEvent("failure_state_update_failed", { postId: post.id, platform, dbError: error.message });
+  } else if ((updated?.length ?? 0) === 0) {
+    // Someone else's claim now owns this row — do not report a state we didn't record.
+    logEvent("failure_state_not_recorded", { postId: post.id, platform, code: failure.code });
   }
 
   const gaveUp = failure.retryable && !willRetry && trigger === "scheduled";
@@ -311,10 +339,11 @@ export async function publishPost(args: {
 }): Promise<PublishOutcome> {
   const { supabase, post, connection, trigger } = args;
   const platform = post.platform as PlatformId;
+  const claimedAt = new Date().toISOString();
 
   let claimed: boolean;
   try {
-    claimed = await claimPost(supabase, post, trigger);
+    claimed = await claimPost(supabase, post, trigger, claimedAt);
   } catch (err) {
     logEvent("claim_failed", {
       postId: post.id,
@@ -338,7 +367,7 @@ export async function publishPost(args: {
   }
   const attempt = trigger === "manual" ? 1 : (post.publish_attempts ?? 0) + 1;
   const fail = (failure: Failure) =>
-    failPost({ supabase, post, platform, trigger, failure, attempt });
+    failPost({ supabase, post, platform, trigger, failure, attempt, claimedAt });
 
   if (!connection) {
     return fail({
@@ -389,6 +418,11 @@ export async function publishPost(args: {
 
   // The platform has the post. From here on, never report failure or retry:
   // the only job is recording that it happened.
+  if (!result.externalPostId) {
+    // The platform accepted the request but returned no id we can trust — still
+    // record success (retrying now would risk a duplicate), but make the gap visible.
+    logEvent("published_without_external_id", { postId: post.id, platform });
+  }
   const nowIso = new Date().toISOString();
   const { data: updated, error: updateError } = await supabase
     .from("architecta_posts")
@@ -410,6 +444,9 @@ export async function publishPost(args: {
     .eq("user_id", post.user_id)
     .eq("id", post.id)
     .eq("status", "publishing")
+    // Same claim fence as the failure path: don't overwrite a row that a later
+    // claim (after a stale sweep) now owns.
+    .eq("publish_claimed_at", claimedAt)
     .select("id");
   const recorded = !updateError && (updated?.length ?? 0) > 0;
   if (!recorded) {

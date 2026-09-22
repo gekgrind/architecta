@@ -156,6 +156,14 @@ export function CalendarShell() {
 
   async function publishNow(item: CalendarItem) {
     if (!item.postId) return;
+    if (
+      item.publishErrorCode === "outcome_unknown" &&
+      !window.confirm(
+        "We couldn't confirm whether this post already went out. Check the platform for a duplicate before retrying. Continue?"
+      )
+    ) {
+      return;
+    }
     setPublishing(item.id);
     setError(null);
     try {
@@ -381,7 +389,10 @@ export function CalendarShell() {
                             <SelectItem value="published">Published</SelectItem>
                           </SelectContent>
                         </Select>
-                        {item.postId && item.status !== "published" && item.postStatus !== "publishing" && (
+                        {item.postId &&
+                          item.status !== "published" &&
+                          item.postStatus !== "publishing" &&
+                          item.postStatus !== "published" && (
                           <Button
                             size="sm"
                             variant="outline"

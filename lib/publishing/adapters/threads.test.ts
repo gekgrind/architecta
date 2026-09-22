@@ -36,4 +36,14 @@ describe("threadsAdapter.publish failures", () => {
       status: 400,
     });
   });
+
+  it("still classifies a 401 with a non-JSON body as an auth error", async () => {
+    // Some failure responses aren't valid JSON; parsing must not throw a raw
+    // SyntaxError that hides the 401 from the reconnect classification.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("<html>Unauthorized</html>", { status: 401 }))
+    );
+    await expect(threadsAdapter.publish(CTX)).rejects.toBeInstanceOf(PublishAuthError);
+  });
 });

@@ -305,6 +305,57 @@ describe("publishPost", () => {
     expect(console.error).toHaveBeenCalled();
   });
 
+  it("a bare network failure (TypeError) is outcome_unknown, not auto-retried", async () => {
+    // fetch() rejects with TypeError both when a request never left the client
+    // and when its response was lost after the platform accepted it — the two
+    // are indistinguishable, so this must never be treated as safe to retry.
+    h.publish.mockRejectedValue(new TypeError("fetch failed"));
+    const db = makeDb([basePost()]);
+    const out = await publishPost({
+      supabase: db.client,
+      post: asPost(basePost()),
+      connection: conn(),
+      trigger: "scheduled",
+    });
+    expect(out).toMatchObject({ ok: false, code: "outcome_unknown", retryable: false });
+    expect(db.tables.architecta_posts[0]).toMatchObject({
+      status: "failed",
+      publish_error_code: "outcome_unknown",
+    });
+    // Not returned to `scheduled`: cron must not re-send it automatically.
+    expect(db.tables.architecta_posts[0].status).not.toBe("scheduled");
+  });
+
+  it("a zombie worker's late completion cannot overwrite a post reclaimed after a stale sweep", async () => {
+    const db = makeDb([basePost()]);
+    h.publish.mockImplementation(async () => {
+      // While this worker's platform call is in flight, simulate the stale
+      // sweep failing the post as outcome_unknown and a user manually
+      // retrying it — a fresh claim now owns the row.
+      db.tables.architecta_posts[0].status = "failed";
+      await claimPost(
+        db.client,
+        asPost(db.tables.architecta_posts[0]),
+        "manual",
+        "2099-01-01T00:00:00.000Z"
+      );
+      return ok;
+    });
+    const out = await publishPost({
+      supabase: db.client,
+      post: asPost(basePost()),
+      connection: conn(),
+      trigger: "scheduled",
+    });
+    // The original worker's success write must not match the reclaimed row.
+    expect(out).toMatchObject({ ok: true, recorded: false });
+    expect(db.tables.architecta_posts[0].status).toBe("publishing");
+    expect(db.tables.architecta_posts[0].meta).toEqual({});
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("published_but_not_recorded")
+    );
+  });
+
   it("reports recorded:false, logs it, and never re-sends when the success write fails", async () => {
     let published = false;
     h.publish.mockImplementation(async () => {

@@ -60,12 +60,20 @@ export async function POST(req: Request) {
       continue;
     }
 
-    const { data: connection } = await supabase
+    const { data: connection, error: connectionError } = await supabase
       .from(CONNECTIONS_TABLE)
       .select("*")
       .eq("user_id", post.user_id)
       .eq("platform", post.platform)
       .maybeSingle();
+
+    if (connectionError) {
+      // A transient DB/PostgREST failure here is not the same as "no connection
+      // exists" — leave the post scheduled so the next cron run can retry the
+      // lookup, instead of claiming it and recording a false not_connected failure.
+      skipped += 1;
+      continue;
+    }
 
     // A missing/expired connection is handled inside publishPost: the post is
     // marked failed with a reconnect message instead of silently staying scheduled.

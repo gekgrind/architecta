@@ -69,11 +69,15 @@ export async function GET(req: Request) {
     { status: string; error: string | null; errorCode: string | null }
   >();
   if (postIds.length > 0) {
-    const { data: posts } = await supabase
+    const { data: posts, error: postsError } = await supabase
       .from("architecta_posts")
       .select("id, status, publish_error, publish_error_code")
       .eq("user_id", session.user.id)
       .in("id", postIds);
+    // A failed lookup here is not "no linked posts" — surfacing it as such would
+    // silently hide publishing/failed states and show a Publish action the
+    // server would reject. Fail loudly instead, matching the primary query.
+    if (postsError) return apiError("server_error", postsError.message);
     for (const p of posts ?? []) {
       publishByPost.set(p.id as string, {
         status: p.status as string,

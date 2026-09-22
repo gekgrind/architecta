@@ -120,6 +120,22 @@ describe("POST /api/cron/publish", () => {
     expect(h.publishPost.mock.calls[0][0].connection).toBeNull();
   });
 
+  it("leaves a post scheduled (does not claim/fail it) when the connection lookup errors", async () => {
+    h.createSupabaseServiceClient.mockResolvedValue(
+      makeSupabase({
+        duePosts: [DUE_LINKEDIN],
+        connectionByUser: { data: null, error: { message: "db down" } },
+      })
+    );
+    const res = await POST(req(SECRET));
+    const body = (await res.json()) as { data: { failed: number; skipped: number } };
+    expect(body.data.skipped).toBe(1);
+    expect(body.data.failed).toBe(0);
+    // A transient lookup failure must not be treated as "no connection" and
+    // must never reach publishPost, which would claim and permanently fail it.
+    expect(h.publishPost).not.toHaveBeenCalled();
+  });
+
   it("counts a post already claimed elsewhere as skipped", async () => {
     h.createSupabaseServiceClient.mockResolvedValue(makeSupabase({ duePosts: [DUE_LINKEDIN] }));
     h.publishPost.mockResolvedValue({

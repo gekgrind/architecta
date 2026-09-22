@@ -155,7 +155,7 @@ export const threadsAdapter: PublishAdapter = {
         body: createParams,
       }
     );
-    const createJson = (await createRes.json()) as {
+    const createJson = (await createRes.json().catch(() => ({}) as { id?: string; error?: GraphError })) as {
       id?: string;
       error?: GraphError;
     };
@@ -175,7 +175,7 @@ export const threadsAdapter: PublishAdapter = {
         body: publishParams,
       }
     );
-    const publishJson = (await publishRes.json()) as {
+    const publishJson = (await publishRes.json().catch(() => ({}) as { id?: string; error?: GraphError })) as {
       id?: string;
       error?: GraphError;
     };
