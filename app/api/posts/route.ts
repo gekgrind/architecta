@@ -5,8 +5,8 @@ import { getAuthenticatedUser } from "@/lib/auth/server";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/ratelimit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
+  postFilterStatusSchema,
   postGenerateInputSchema,
-  postStatusSchema,
 } from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -85,7 +85,7 @@ export async function GET(req: Request) {
     .limit(200);
 
   if (status) {
-    const parsed = postStatusSchema.safeParse(status);
+    const parsed = postFilterStatusSchema.safeParse(status);
     if (parsed.success) query = query.eq("status", parsed.data);
   }
   if (platform) query = query.eq("platform", platform);

@@ -26,7 +26,7 @@ export async function POST(_req: Request, ctx: RouteContext) {
   const { data: post, error: postError } = await supabase
     .from("architecta_posts")
     .select(
-      "id, user_id, platform, title, hook, caption, body, cta, hashtags, image_asset_id, video_asset_id, meta"
+      "id, user_id, platform, title, hook, caption, body, cta, hashtags, image_asset_id, video_asset_id, meta, status, publish_attempts"
     )
     .eq("user_id", session.user.id)
     .eq("id", id)
@@ -34,6 +34,16 @@ export async function POST(_req: Request, ctx: RouteContext) {
 
   if (postError) return apiError("server_error", postError.message);
   if (!post) return apiError("not_found", "Post not found");
+
+  if (post.status === "published" || post.status === "publishing") {
+    return apiError(
+      "bad_request",
+      post.status === "published"
+        ? "This post has already been published."
+        : "This post is already being published.",
+      { status: 409, details: { code: "already_publishing", status: post.status } }
+    );
+  }
 
   if (!isPlatformId(post.platform)) {
     return apiError(
@@ -56,7 +66,8 @@ export async function POST(_req: Request, ctx: RouteContext) {
   if ((connection as ConnectionRow).status !== "connected") {
     return apiError(
       "bad_request",
-      `Your ${post.platform} connection needs to be reconnected`
+      `Your ${post.platform} connection needs to be reconnected`,
+      { details: { code: "reconnect_required", platform: post.platform } }
     );
   }
 
@@ -68,12 +79,21 @@ export async function POST(_req: Request, ctx: RouteContext) {
   });
 
   if (!outcome.ok) {
-    return apiError("upstream_error", outcome.error);
+    if (outcome.code === "already_publishing") {
+      return apiError("bad_request", outcome.error, {
+        status: 409,
+        details: { code: outcome.code },
+      });
+    }
+    return apiError("upstream_error", outcome.error, {
+      details: { code: outcome.code, platform: post.platform },
+    });
   }
 
   return apiOk({
     published: true,
     externalPostId: outcome.externalPostId,
     externalUrl: outcome.externalUrl,
+    recorded: outcome.recorded,
   });
 }

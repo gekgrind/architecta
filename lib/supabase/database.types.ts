@@ -410,6 +410,10 @@ export type Database = {
           image_asset_id: string | null
           image_prompt: string | null
           meta: Json
+          publish_attempts: number
+          publish_claimed_at: string | null
+          publish_error: string | null
+          publish_error_code: string | null
           platform: string
           published_at: string | null
           scheduled_for: string | null
@@ -436,6 +440,10 @@ export type Database = {
           image_asset_id?: string | null
           image_prompt?: string | null
           meta?: Json
+          publish_attempts?: number
+          publish_claimed_at?: string | null
+          publish_error?: string | null
+          publish_error_code?: string | null
           platform: string
           published_at?: string | null
           scheduled_for?: string | null
@@ -462,6 +470,10 @@ export type Database = {
           image_asset_id?: string | null
           image_prompt?: string | null
           meta?: Json
+          publish_attempts?: number
+          publish_claimed_at?: string | null
+          publish_error?: string | null
+          publish_error_code?: string | null
           platform?: string
           published_at?: string | null
           scheduled_for?: string | null

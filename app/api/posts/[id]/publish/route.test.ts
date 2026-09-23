@@ -147,4 +147,63 @@ describe("POST /api/posts/[id]/publish", () => {
     const res = await POST(new Request("http://x"), ctx());
     expect(res.status).toBe(502);
   });
+
+  it.each(["publishing", "published"])("409 without publishing when the post is %s", async (status) => {
+    h.createSupabaseServerClient.mockResolvedValue(
+      makeSupabase({
+        architecta_posts: { data: { ...LINKEDIN_POST, status }, error: null },
+        architecta_platform_connections: { data: CONNECTION, error: null },
+      })
+    );
+    h.getAuthenticatedUser.mockResolvedValue({ user: { id: USER_ID } });
+    const res = await POST(new Request("http://x"), ctx());
+    expect(res.status).toBe(409);
+    expect(h.publishPost).not.toHaveBeenCalled();
+  });
+
+  it("returns a recognizable reconnect_required error for an expired connection", async () => {
+    h.createSupabaseServerClient.mockResolvedValue(
+      makeSupabase({
+        architecta_posts: { data: LINKEDIN_POST, error: null },
+        architecta_platform_connections: {
+          data: { ...CONNECTION, status: "expired" },
+          error: null,
+        },
+      })
+    );
+    h.getAuthenticatedUser.mockResolvedValue({ user: { id: USER_ID } });
+    const res = await POST(new Request("http://x"), ctx());
+    const body = (await res.json()) as { error: { details: { code: string } } };
+    expect(res.status).toBe(400);
+    expect(body.error.details.code).toBe("reconnect_required");
+    expect(h.publishPost).not.toHaveBeenCalled();
+  });
+
+  it("409 on a lost claim race; passes the failure code through otherwise", async () => {
+    h.createSupabaseServerClient.mockResolvedValue(
+      makeSupabase({
+        architecta_posts: { data: LINKEDIN_POST, error: null },
+        architecta_platform_connections: { data: CONNECTION, error: null },
+      })
+    );
+    h.getAuthenticatedUser.mockResolvedValue({ user: { id: USER_ID } });
+    h.publishPost.mockResolvedValue({
+      ok: false,
+      error: "already",
+      code: "already_publishing",
+      retryable: false,
+    });
+    expect((await POST(new Request("http://x"), ctx())).status).toBe(409);
+
+    h.publishPost.mockResolvedValue({
+      ok: false,
+      error: "Your LinkedIn connection has expired. Reconnect LinkedIn to continue publishing.",
+      code: "reconnect_required",
+      retryable: false,
+    });
+    const res = await POST(new Request("http://x"), ctx());
+    const body = (await res.json()) as { error: { details: { code: string } } };
+    expect(res.status).toBe(502);
+    expect(body.error.details.code).toBe("reconnect_required");
+  });
 });

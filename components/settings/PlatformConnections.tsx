@@ -196,7 +196,7 @@ export function PlatformConnections() {
                 disabled={!entry.implemented}
               >
                 <Plug className="h-4 w-4" />
-                Connect
+                {entry.connection ? "Reconnect" : "Connect"}
               </Button>
             )}
           </div>

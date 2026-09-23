@@ -15,7 +15,7 @@ export type ContentType =
   | "landing_page"
   | "product_description";
 
-export type ContentStatus = "draft" | "published" | "scheduled" | "archived";
+export type ContentStatus = "draft" | "published" | "scheduled" | "publishing" | "failed" | "archived";
 
 export type ContentPerformanceSummary = {
   engagements: number;

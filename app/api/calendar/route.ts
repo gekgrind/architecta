@@ -60,8 +60,43 @@ export async function GET(req: Request) {
   const { data, error } = await query;
   if (error) return apiError("server_error", error.message);
 
+  const rows = (data ?? []) as CalendarRow[];
+
+  // Surface each linked post's publishing state (publishing / failed / reconnect) alongside the item.
+  const postIds = rows.map((r) => r.post_id).filter((id): id is string => !!id);
+  const publishByPost = new Map<
+    string,
+    { status: string; error: string | null; errorCode: string | null }
+  >();
+  if (postIds.length > 0) {
+    const { data: posts, error: postsError } = await supabase
+      .from("architecta_posts")
+      .select("id, status, publish_error, publish_error_code")
+      .eq("user_id", session.user.id)
+      .in("id", postIds);
+    // A failed lookup here is not "no linked posts" — surfacing it as such would
+    // silently hide publishing/failed states and show a Publish action the
+    // server would reject. Fail loudly instead, matching the primary query.
+    if (postsError) return apiError("server_error", postsError.message);
+    for (const p of posts ?? []) {
+      publishByPost.set(p.id as string, {
+        status: p.status as string,
+        error: (p.publish_error as string | null) ?? null,
+        errorCode: (p.publish_error_code as string | null) ?? null,
+      });
+    }
+  }
+
   return apiOk({
-    items: (data ?? []).map((row) => toCamel(row as CalendarRow)),
+    items: rows.map((row) => {
+      const publish = row.post_id ? publishByPost.get(row.post_id) : undefined;
+      return {
+        ...toCamel(row),
+        postStatus: publish?.status ?? null,
+        publishError: publish?.error ?? null,
+        publishErrorCode: publish?.errorCode ?? null,
+      };
+    }),
   });
 }
 

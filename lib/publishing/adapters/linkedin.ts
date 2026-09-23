@@ -1,7 +1,9 @@
 import "server-only";
 
 import {
+  PublishAuthError,
   PublishConfigError,
+  PublishHttpError,
   type AccountIdentity,
   type OAuthTokens,
   type PublishAdapter,
@@ -185,7 +187,11 @@ export const linkedinAdapter: PublishAdapter = {
       } catch {
         // ignore
       }
-      throw new Error(`LinkedIn post failed (${res.status})${detail ? `: ${detail}` : ""}`);
+      if (res.status === 401) throw new PublishAuthError("LinkedIn");
+      throw new PublishHttpError(
+        `LinkedIn post failed (${res.status})${detail ? `: ${detail}` : ""}`,
+        res.status
+      );
     }
 
     // The created post URN comes back in a response header.

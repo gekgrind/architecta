@@ -51,6 +51,8 @@ const POST_STATUS_TO_CONTENT_STATUS: Record<string, ContentStatus> = {
   draft: "draft",
   approved: "draft",
   scheduled: "scheduled",
+  publishing: "publishing",
+  failed: "failed",
   published: "published",
   archived: "archived",
 }

@@ -141,3 +141,20 @@ describe("linkedinAdapter.publish", () => {
     ).rejects.toThrow(/LinkedIn post failed/);
   });
 });
+
+
+describe("linkedinAdapter.publish auth handling", () => {
+  it("throws PublishAuthError on 401 so the connection can be flagged for reconnect", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 401 })));
+    await expect(
+      linkedinAdapter.publish({ accessToken: "t", externalAccountId: "m", text: "hi" })
+    ).rejects.toMatchObject({ name: "PublishAuthError" });
+  });
+
+  it("keeps other rejections as PublishHttpError with the status", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 422 })));
+    await expect(
+      linkedinAdapter.publish({ accessToken: "t", externalAccountId: "m", text: "hi" })
+    ).rejects.toMatchObject({ name: "PublishHttpError", status: 422 });
+  });
+});

@@ -28,6 +28,17 @@ export const postStatusSchema = z.enum([
   "archived",
 ]);
 
+// Read-only lifecycle states a post can be in while a delivery is in flight or
+// has failed. These are never a valid client-supplied write value (they're only
+// ever set by the publishing coordinator's atomic claim), so they're a separate
+// schema from `postStatusSchema` rather than added to it — that keeps them out
+// of postPatchSchema, which reuses postStatusSchema for status writes.
+export const postFilterStatusSchema = z.enum([
+  ...postStatusSchema.options,
+  "publishing",
+  "failed",
+]);
+
 export const calendarStatusSchema = z.enum([
   "idea",
   "draft",

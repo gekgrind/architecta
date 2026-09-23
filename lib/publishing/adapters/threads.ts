@@ -1,7 +1,9 @@
 import "server-only";
 
 import {
+  PublishAuthError,
   PublishConfigError,
+  PublishHttpError,
   type AccountIdentity,
   type OAuthTokens,
   type PublishAdapter,
@@ -11,6 +13,14 @@ import {
 
 // Meta Threads API. The OAuth dialog lives on threads.net; everything else is
 // served from the graph.threads.net Graph API.
+type GraphError = { message?: string; code?: number; type?: string };
+
+/** Graph API: HTTP 401 or OAuthException code 190 means the token is invalid/expired. */
+function throwGraphFailure(res: Response, error: GraphError | undefined, fallback: string): never {
+  if (res.status === 401 || error?.code === 190) throw new PublishAuthError("Threads");
+  throw new PublishHttpError(error?.message || `${fallback} (${res.status})`, res.status);
+}
+
 const GRAPH_VERSION = "v1.0";
 const AUTH_URL = "https://threads.net/oauth/authorize";
 const TOKEN_URL = "https://graph.threads.net/oauth/access_token";
@@ -145,15 +155,12 @@ export const threadsAdapter: PublishAdapter = {
         body: createParams,
       }
     );
-    const createJson = (await createRes.json()) as {
+    const createJson = (await createRes.json().catch(() => ({}) as { id?: string; error?: GraphError })) as {
       id?: string;
-      error?: { message?: string };
+      error?: GraphError;
     };
     if (!createRes.ok || !createJson.id) {
-      throw new Error(
-        createJson.error?.message ||
-          `Threads container creation failed (${createRes.status})`
-      );
+      throwGraphFailure(createRes, createJson.error, "Threads container creation failed");
     }
 
     const publishParams = new URLSearchParams({
@@ -168,15 +175,12 @@ export const threadsAdapter: PublishAdapter = {
         body: publishParams,
       }
     );
-    const publishJson = (await publishRes.json()) as {
+    const publishJson = (await publishRes.json().catch(() => ({}) as { id?: string; error?: GraphError })) as {
       id?: string;
-      error?: { message?: string };
+      error?: GraphError;
     };
     if (!publishRes.ok || !publishJson.id) {
-      throw new Error(
-        publishJson.error?.message ||
-          `Threads publish failed (${publishRes.status})`
-      );
+      throwGraphFailure(publishRes, publishJson.error, "Threads publish failed");
     }
 
     return {

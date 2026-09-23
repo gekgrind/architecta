@@ -17,6 +17,14 @@ const statusConfig: Record<ContentStatus, { label: string; className: string }> 
     label: "Scheduled",
     className: "bg-blue-100 text-blue-700",
   },
+  publishing: {
+    label: "Publishing",
+    className: "bg-blue-100 text-blue-700",
+  },
+  failed: {
+    label: "Failed",
+    className: "bg-red-100 text-red-700",
+  },
   published: {
     label: "Published",
     className: "bg-emerald-100 text-emerald-700",

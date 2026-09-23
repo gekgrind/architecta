@@ -44,15 +44,20 @@ const USER_ID = "user-abc";
  */
 function makeBuilder(resultByTable: Record<string, { data: unknown; error: unknown }>) {
   let table = "";
-  const eq = vi.fn(() => builder);
   const insertSpy = vi.fn();
   const result = () => resultByTable[table] ?? { data: null, error: null };
-  const terminal = () => ({
+  // `current` tracks which chain link `eq()` should return: the builder itself
+  // before `limit()`, or the (still-chainable, thenable) terminal after it —
+  // mirrors real Postgrest filter builders, which stay chainable post-limit.
+  let current: unknown;
+  const eq = vi.fn(() => current);
+  const terminal = {
+    eq,
     maybeSingle: () => Promise.resolve(result()),
     single: () => Promise.resolve(result()),
     then: (onF: (v: unknown) => unknown, onR?: (e: unknown) => unknown) =>
       Promise.resolve(result()).then(onF, onR),
-  });
+  };
   const builder = {
     eq,
     insertSpy,
@@ -67,7 +72,8 @@ function makeBuilder(resultByTable: Record<string, { data: unknown; error: unkno
       return builder;
     },
     limit() {
-      return terminal();
+      current = terminal;
+      return terminal;
     },
     insert(rows: unknown) {
       insertSpy(rows);
@@ -80,6 +86,7 @@ function makeBuilder(resultByTable: Record<string, { data: unknown; error: unkno
       return Promise.resolve(result());
     },
   };
+  current = builder;
   return builder;
 }
 
@@ -145,6 +152,22 @@ describe("GET /api/posts", () => {
     expect(body.data.posts[0]).toHaveProperty("imagePrompt"); // snake -> camel
     expect(builder.eq).toHaveBeenCalledWith("user_id", USER_ID);
   });
+
+  it.each(["publishing", "failed"])(
+    "applies the '%s' status filter instead of silently ignoring it",
+    async (status) => {
+      const builder = makeBuilder({ architecta_posts: { data: [], error: null } });
+      h.createSupabaseServerClient.mockResolvedValue(builder);
+      h.getAuthenticatedUser.mockResolvedValue({ user: { id: USER_ID } });
+
+      const res = await GET(new Request(`http://localhost/api/posts?status=${status}`));
+      expect(res.status).toBe(200);
+      // These are valid lifecycle statuses (added by the publish-reliability
+      // migration) but weren't valid client-write values, so the filter must
+      // still recognize them rather than dropping the constraint entirely.
+      expect(builder.eq).toHaveBeenCalledWith("status", status);
+    }
+  );
 });
 
 describe("POST /api/posts", () => {

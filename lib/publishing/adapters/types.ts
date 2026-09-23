@@ -64,3 +64,22 @@ export class PublishConfigError extends Error {
     this.name = "PublishConfigError";
   }
 }
+
+/** The platform rejected the access token (invalid, expired or revoked): the user must reconnect. */
+export class PublishAuthError extends Error {
+  constructor(platform: string, detail?: string) {
+    super(`${platform} rejected the access token${detail ? `: ${detail}` : ""}`);
+    this.name = "PublishAuthError";
+  }
+}
+
+/** A non-auth HTTP failure from the platform, carrying the status for retry classification. */
+export class PublishHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = "PublishHttpError";
+  }
+}
