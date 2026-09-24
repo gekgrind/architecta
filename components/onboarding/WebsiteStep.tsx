@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { saveStepAnswers, runWebsiteAnalysis } from "@/lib/onboarding/actions";
 import { getPreviousStepUrl } from "@/lib/onboarding/steps";
 import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
+import { analyzeWebsiteForStep } from "@/lib/onboarding/website-step-flow";
 
 type WebsiteStepProps = {
   answers: OnboardingAnswers;
@@ -31,39 +32,52 @@ export default function WebsiteStep({
   const [error, setError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStatus, setAnalysisStatus] = useState<string | null>(null);
+  const [analysisFailed, setAnalysisFailed] = useState(false);
 
   async function handleAnalyzeAndContinue() {
     setError(null);
+    setAnalysisFailed(false);
 
     if (hasWebsite && websiteUrl.trim()) {
-      setAnalyzing(true);
-      setAnalysisStatus("Analyzing your website…");
+      const outcome = await analyzeWebsiteForStep(websiteUrl.trim(), {
+        analyze: runWebsiteAnalysis,
+        setAnalyzing: (value) => {
+          setAnalyzing(value);
+          setAnalysisStatus(value ? "Analyzing your website…" : null);
+        },
+      });
 
-      const analysisResult = await runWebsiteAnalysis(websiteUrl.trim());
-
-      setAnalyzing(false);
-      setAnalysisStatus(null);
-
-      if (!analysisResult.ok) {
-        setError(`Website analysis failed: ${analysisResult.error}. You can continue manually.`);
+      // Stay on the step so the user can retry or continue manually.
+      if (!outcome.ok) {
+        setError(outcome.error);
+        setAnalysisFailed(true);
+        return;
       }
     }
 
+    saveAndContinue();
+  }
+
+  function saveAndContinue() {
     startTransition(async () => {
-      const result = await saveStepAnswers(
-        {
-          has_website: hasWebsite ?? false,
-          website_url: hasWebsite ? websiteUrl.trim() : undefined,
-        },
-        "website"
-      );
+      try {
+        const result = await saveStepAnswers(
+          {
+            has_website: hasWebsite ?? false,
+            website_url: hasWebsite ? websiteUrl.trim() : undefined,
+          },
+          "website"
+        );
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+
+        router.push(result.next);
+      } catch {
+        setError("Something went wrong saving your answers. Please try again.");
       }
-
-      router.push(result.next);
     });
   }
 
@@ -135,6 +149,18 @@ export default function WebsiteStep({
       )}
 
       {error && <p className="text-red-400 text-sm">{error}</p>}
+
+      {analysisFailed && hasWebsite === true && (
+        <Button
+          variant="outline"
+          size="lg"
+          className="w-full"
+          disabled={isPending || analyzing}
+          onClick={saveAndContinue}
+        >
+          Continue without analysis
+        </Button>
+      )}
 
       <div className="flex gap-3">
         {getPreviousStepUrl("website") && (

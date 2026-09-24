@@ -16,6 +16,7 @@ import {
   type OnboardingAnswers,
 } from "./persistence";
 import { analyzeWebsite } from "./website-analysis";
+import { WEBSITE_ANALYSIS_FAILED_MESSAGE } from "./website-step-flow";
 
 /* =======================================================
    Types
@@ -164,21 +165,35 @@ export async function runWebsiteAnalysis(url: string) {
 
   if (!user) return { ok: false as const, error: "Not authenticated" };
 
-  const result = await analyzeWebsite(user.id, url);
+  try {
+    // analyzeWebsite returns only user-safe error strings.
+    const result = await analyzeWebsite(user.id, url);
 
-  if (!result.ok) {
-    return { ok: false as const, error: result.error };
+    if (!result.ok) {
+      return { ok: false as const, error: result.error };
+    }
+
+    const { session } = await getOrCreateArchitectaOnboarding();
+
+    const saved = await saveOnboardingProgress(
+      session.id,
+      { website_analysis: result.analysis },
+      "website"
+    );
+
+    if (!saved.ok) {
+      console.error("[website-analysis] failed to persist analysis:", saved.error);
+      return { ok: false as const, error: WEBSITE_ANALYSIS_FAILED_MESSAGE };
+    }
+
+    return { ok: true as const, analysis: result.analysis };
+  } catch (err) {
+    console.error(
+      "[website-analysis] unexpected failure:",
+      err instanceof Error ? err.name : "unknown"
+    );
+    return { ok: false as const, error: WEBSITE_ANALYSIS_FAILED_MESSAGE };
   }
-
-  const { session } = await getOrCreateArchitectaOnboarding();
-
-  await saveOnboardingProgress(
-    session.id,
-    { website_analysis: result.analysis },
-    "website"
-  );
-
-  return { ok: true as const, analysis: result.analysis };
 }
 
 /* =======================================================

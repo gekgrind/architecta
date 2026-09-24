@@ -44,6 +44,7 @@ function formatCost(n: number): string {
 const PROVIDER_LABEL: Record<string, string> = {
   anthropic: "Claude",
   openai: "OpenAI",
+  nvidia: "NVIDIA",
 };
 
 export function AiUsageCard() {

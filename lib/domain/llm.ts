@@ -1,7 +1,8 @@
 import type { EntityId } from "./common";
 
-export type LlmProvider = "openai" | "anthropic";
-export type LlmPreference = "auto" | LlmProvider;
+export type LlmProvider = "openai" | "anthropic" | "nvidia";
+// NVIDIA serves provider-locked tasks only; it is not a user-selectable preference.
+export type LlmPreference = "auto" | "openai" | "anthropic";
 
 export type LlmRole = "system" | "user" | "assistant";
 

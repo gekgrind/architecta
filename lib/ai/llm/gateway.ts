@@ -17,10 +17,12 @@ type UserPreferenceLookup = (userId: string) => Promise<{
 type GatewayDeps = {
   openai: LlmClient;
   anthropic: LlmClient;
+  nvidia: LlmClient;
   getUserPreference: UserPreferenceLookup;
 };
 
 function getClient(deps: GatewayDeps, provider: LlmProvider): LlmClient {
+  if (provider === "nvidia") return deps.nvidia;
   return provider === "openai" ? deps.openai : deps.anthropic;
 }
 

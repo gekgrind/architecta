@@ -3,6 +3,7 @@ import "server-only";
 import { runGateway } from "@/lib/ai/llm/run";
 import { extractJson } from "@/lib/ai/llm/json";
 import type { WebsiteAnalysisResult } from "./persistence";
+import { WEBSITE_ANALYSIS_FAILED_MESSAGE } from "./website-step-flow";
 
 /* =======================================================
    SSRF Protection
@@ -131,7 +132,8 @@ async function fetchWebsiteContent(url: string): Promise<{ ok: true; text: strin
     if (message.includes("abort")) {
       return { ok: false, error: "Website request timed out" };
     }
-    return { ok: false, error: message };
+    console.error("[website-analysis] website fetch failed:", redactSecrets(message));
+    return { ok: false, error: "the site could not be reached" };
   }
 }
 
@@ -164,6 +166,37 @@ function htmlToText(html: string): string {
     .replace(/ {2,}/g, " ")
     .trim()
     .slice(0, 8000);
+}
+
+/* =======================================================
+   Error sanitization
+======================================================= */
+
+// Provider errors can echo credentials (e.g. "Incorrect API key provided:
+// sk-proj-…"). Scrub them before anything reaches a log line.
+function redactSecrets(message: string): string {
+  let out = message;
+  const key = process.env.NVIDIA_API_KEY;
+  if (key && key.length >= 8) out = out.split(key).join("[REDACTED]");
+  return out
+    .replace(/\b(sk|nvapi)-[A-Za-z0-9_*.-]{4,}/g, "[REDACTED_KEY]")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [REDACTED]")
+    .slice(0, 300);
+}
+
+// Models sometimes return a list where the contract expects prose
+// (e.g. "offers": ["A", "B"]); keep the evidence instead of dropping it.
+function asText(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    const parts = value.filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+    return parts.length > 0 ? parts.join("; ") : undefined;
+  }
+  return undefined;
+}
+
+function websiteUnreadable(detail: string): string {
+  return `We couldn't read your website (${detail}). You can try again or continue manually.`;
 }
 
 /* =======================================================
@@ -210,15 +243,16 @@ export async function analyzeWebsite(
   const fetchResult = await fetchWebsiteContent(url);
 
   if (!fetchResult.ok) {
-    return { ok: false, error: fetchResult.error };
+    return { ok: false, error: websiteUnreadable(fetchResult.error) };
   }
 
   const websiteText = htmlToText(fetchResult.text);
 
   if (websiteText.length < 50) {
-    return { ok: false, error: "Website did not contain enough analyzable text content" };
+    return { ok: false, error: websiteUnreadable("not enough readable text on the page") };
   }
 
+  let modelText: string;
   try {
     const result = await runGateway({
       userId,
@@ -226,41 +260,64 @@ export async function analyzeWebsite(
       tier: "draft",
       systemPrompt: ANALYSIS_SYSTEM_PROMPT,
       prompt: `Analyze this website content and extract business/brand information:\n\nURL: ${url}\n\n---WEBSITE CONTENT START---\n${websiteText}\n---WEBSITE CONTENT END---\n\nReturn a JSON object with the extracted information.`,
-      maxTokens: 2000,
+      // GLM-5.3 reasons before answering and reasoning tokens count toward
+      // this cap; 2000 left too little headroom for the JSON on real sites.
+      maxTokens: 4096,
       temperature: 0.2,
     });
+    modelText = result.text;
+  } catch (err) {
+    const status =
+      typeof err === "object" && err !== null && "status" in err
+        ? (err as { status?: unknown }).status
+        : undefined;
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[website-analysis] model call failed", {
+      status,
+      message: redactSecrets(message),
+    });
+    return { ok: false, error: WEBSITE_ANALYSIS_FAILED_MESSAGE };
+  }
 
-    const analysis = extractJson<Partial<WebsiteAnalysisResult>>(result.text);
+  try {
+    const analysis = extractJson<Partial<WebsiteAnalysisResult> | null>(modelText);
+
+    if (!analysis || typeof analysis !== "object" || Array.isArray(analysis)) {
+      throw new Error("Model output was not a JSON object");
+    }
 
     const validated: WebsiteAnalysisResult = {
-      brand_name: typeof analysis.brand_name === "string" ? analysis.brand_name : undefined,
-      industry: typeof analysis.industry === "string" ? analysis.industry : undefined,
-      description: typeof analysis.description === "string" ? analysis.description : undefined,
-      audience: typeof analysis.audience === "string" ? analysis.audience : undefined,
-      offers: typeof analysis.offers === "string" ? analysis.offers : undefined,
-      tone: typeof analysis.tone === "string" ? analysis.tone : undefined,
-      voice_characteristics: typeof analysis.voice_characteristics === "string" ? analysis.voice_characteristics : undefined,
+      brand_name: asText(analysis.brand_name),
+      industry: asText(analysis.industry),
+      description: asText(analysis.description),
+      audience: asText(analysis.audience),
+      offers: asText(analysis.offers),
+      tone: asText(analysis.tone),
+      voice_characteristics: asText(analysis.voice_characteristics),
       topics: Array.isArray(analysis.topics)
         ? analysis.topics.filter((t): t is string => typeof t === "string")
         : undefined,
-      mission: typeof analysis.mission === "string" ? analysis.mission : undefined,
-      values: typeof analysis.values === "string" ? analysis.values : undefined,
+      mission: asText(analysis.mission),
+      values: asText(analysis.values),
       differentiators: Array.isArray(analysis.differentiators)
         ? analysis.differentiators.filter((d): d is string => typeof d === "string")
         : undefined,
       cta_patterns: Array.isArray(analysis.cta_patterns)
         ? analysis.cta_patterns.filter((c): c is string => typeof c === "string")
         : undefined,
-      typical_customers: typeof analysis.typical_customers === "string" ? analysis.typical_customers : undefined,
+      typical_customers: asText(analysis.typical_customers),
       confidence: analysis.confidence === "high" || analysis.confidence === "medium" ? analysis.confidence : "low",
       analyzed_at: new Date().toISOString(),
     };
 
     return { ok: true, analysis: validated };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Analysis failed";
-    return { ok: false, error: message };
+    console.error("[website-analysis] could not parse model output", {
+      reason: err instanceof Error ? err.message : "unknown",
+      outputLength: modelText.length,
+    });
+    return { ok: false, error: WEBSITE_ANALYSIS_FAILED_MESSAGE };
   }
 }
 
-export { isUnsafeUrl };
+export { isUnsafeUrl, redactSecrets };

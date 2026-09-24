@@ -14,6 +14,8 @@ const FALLBACKS_BY_PROVIDER: Record<LlmProvider, ModelChoice[]> = {
     { provider: "openai", model: "gpt-4o" },
     { provider: "openai", model: "gpt-4o-mini" },
   ],
+  // No automatic fallback: NVIDIA failures should stay observable.
+  nvidia: [],
 };
 
 // If a user pins provider, keep it pinned unless fallback needed.
@@ -29,6 +31,11 @@ export function buildRoutePlan(args: {
 }): RoutePlan {
   const tier = normalizeTier(args.tier);
   const taskRoute = TASK_ROUTES[args.task][tier];
+
+  // NVIDIA-routed tasks ignore provider preferences and never fall back.
+  if (taskRoute.provider === "nvidia") {
+    return { primary: taskRoute, fallbacks: [] };
+  }
 
   const pref = args.preference ?? args.workspacePreference ?? "auto";
 

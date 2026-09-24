@@ -3,6 +3,7 @@ import "server-only";
 import { createLlmGateway } from "./gateway";
 import { buildSystemPrompt, withSystem } from "./prompts";
 import { createAnthropicClient } from "./providers/anthropic";
+import { createNvidiaClient } from "./providers/nvidia";
 import { createOpenAiClient } from "./providers/openai";
 import { getUserAiPreference } from "./preferences";
 import type {
@@ -21,6 +22,7 @@ function getGateway() {
     cachedGateway = createLlmGateway({
       openai: createOpenAiClient(),
       anthropic: createAnthropicClient(),
+      nvidia: createNvidiaClient(),
       getUserPreference: async (userId: string) => {
         const pref = await getUserAiPreference(userId);
         return {
