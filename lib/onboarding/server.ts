@@ -25,7 +25,6 @@ async function getOrCreateProfileOnboardingState(userId: string) {
     .insert({
       id: userId,
       onboarding_complete: false,
-      onboarding_step: "welcome",
     })
     .select("id, onboarding_complete, onboarding_completed_at")
     .single();
@@ -244,44 +243,3 @@ export async function setOnboardingFlag(flagKey: string, value: unknown) {
   }
 }
 
-/**
- * FINALIZE onboarding (authoritative)
- * - Marks onboarding session completed
- * - Updates profiles.onboarding_complete
- * - Locks onboarding_step = "complete"
- * - Safe to call multiple times
- */
-export async function completeArchitectaOnboarding() {
-  const supabase = await createSupabaseServerClient();
-
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    throw new Error("Not authenticated");
-  }
-
-  await getOrCreateProfileOnboardingState(user.id);
-
-  // 1️⃣ Update onboarding session
-  await supabase
-    .from("onboarding_sessions")
-    .update({
-      current_step: "finish",
-      status: "completed",
-    })
-    .eq("user_id", user.id)
-    .eq("app", "architecta");
-
-  // 2️⃣ Update profile routing flags (SOURCE OF TRUTH)
-  await supabase
-    .from("profiles")
-    .update({
-      onboarding_complete: true,
-      onboarding_completed_at: new Date().toISOString(),
-      onboarding_step: "complete",
-    })
-    .eq("id", user.id);
-}

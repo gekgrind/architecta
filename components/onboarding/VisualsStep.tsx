@@ -2,21 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import {
-  updateArchitectaOnboarding,
-  setArchitectaOnboardingStep,
-} from "@/lib/onboarding/actions";
+import { saveStepAnswers } from "@/lib/onboarding/actions";
+import StepNavigation from "@/components/onboarding/StepNavigation";
+import { getPreviousStepUrl } from "@/lib/onboarding/steps";
+import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
 
 type VisualsStepProps = {
-  initialProfile: {
-    visual_style?: string | null;
-    primary_colors?: string[] | null;
-    has_logo?: boolean | null;
-  };
-  initialSession: {
-    id: string;
-  };
+  answers: OnboardingAnswers;
+  sessionId: string;
 };
 
 const STYLE_OPTIONS = [
@@ -27,18 +20,19 @@ const STYLE_OPTIONS = [
   { id: "playful", label: "Playful & expressive" },
 ];
 
-export default function VisualsStep({ initialProfile }: VisualsStepProps) {
+export default function VisualsStep({ answers }: VisualsStepProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   const [style, setStyle] = useState(
-    initialProfile.visual_style ?? ""
+    answers.visual_style ?? ""
   );
   const [colors, setColors] = useState(
-    (initialProfile.primary_colors ?? []).join(", ")
+    (answers.primary_colors ?? []).join(", ")
   );
   const [hasLogo, setHasLogo] = useState<boolean>(
-    initialProfile.has_logo ?? false
+    answers.has_logo ?? false
   );
 
   const isValid = style.length > 0;
@@ -47,24 +41,30 @@ export default function VisualsStep({ initialProfile }: VisualsStepProps) {
     if (!isValid) return;
 
     startTransition(async () => {
-      await updateArchitectaOnboarding({
-        visual_style: style,
-        primary_colors: colors
-          .split(",")
-          .map((c) => c.trim())
-          .filter(Boolean),
-        has_logo: hasLogo,
-      });
+      setError(null);
+      const result = await saveStepAnswers(
+        {
+          visual_style: style,
+          primary_colors: colors
+            .split(",")
+            .map((c) => c.trim())
+            .filter(Boolean),
+          has_logo: hasLogo,
+        },
+        "visuals"
+      );
 
-      await setArchitectaOnboardingStep("visuals");
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
 
-      router.push("/onboarding/review");
+      router.push(result.next);
     });
   }
 
   return (
     <div className="space-y-10">
-      {/* Header */}
       <div className="space-y-3 text-center">
         <h1 className="text-3xl font-semibold tracking-tight">
           Visual identity
@@ -74,7 +74,6 @@ export default function VisualsStep({ initialProfile }: VisualsStepProps) {
         </p>
       </div>
 
-      {/* Style selection */}
       <div className="space-y-4">
         <label className="block text-sm font-medium text-slate-300">
           Overall visual style
@@ -105,7 +104,6 @@ export default function VisualsStep({ initialProfile }: VisualsStepProps) {
         </div>
       </div>
 
-      {/* Color preferences */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-slate-300">
           Primary colors (optional)
@@ -122,7 +120,6 @@ export default function VisualsStep({ initialProfile }: VisualsStepProps) {
         </p>
       </div>
 
-      {/* Logo toggle */}
       <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3">
         <span className="text-sm text-slate-300">
           I already have a logo
@@ -140,15 +137,14 @@ export default function VisualsStep({ initialProfile }: VisualsStepProps) {
         </button>
       </div>
 
-      {/* CTA */}
-      <Button
-        size="lg"
-        className="w-full"
-        disabled={!isValid || isPending}
-        onClick={handleContinue}
-      >
-        {isPending ? "Saving…" : "Continue"}
-      </Button>
+      {error && <p className="text-red-400 text-sm">{error}</p>}
+
+      <StepNavigation
+        backUrl={getPreviousStepUrl("visuals")}
+        isPending={isPending}
+        isValid={isValid}
+        onContinue={handleContinue}
+      />
     </div>
   );
 }

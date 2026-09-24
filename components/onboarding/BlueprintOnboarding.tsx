@@ -8,20 +8,17 @@ import "./blueprint.css";
 
 import { ONBOARDING_STEPS } from "@/lib/onboarding/steps";
 import type { OnboardingStep } from "@/lib/onboarding/types";
+import type { OnboardingContext } from "./steps/StepRenderer";
 import BlueprintCard from "./BlueprintCard";
 import { advanceArchitectaOnboardingStepClient } from "@/lib/onboarding/actions";
 
 type Props = {
   step: string;
+  context: OnboardingContext;
 };
 
 type Direction = "forward" | "back";
 
-/**
- * Motion tuning per step
- * Early steps = energetic
- * Later steps = calmer / heavier
- */
 function motionProfileFor(stepId: string) {
   if (stepId === "welcome" || stepId === "source") {
     return { stiffness: 520, damping: 34, mass: 0.7, exitDuration: 0.42 };
@@ -34,7 +31,7 @@ function motionProfileFor(stepId: string) {
   return { stiffness: 360, damping: 36, mass: 0.9, exitDuration: 0.48 };
 }
 
-export default function BlueprintOnboarding({ step }: Props) {
+export default function BlueprintOnboarding({ step, context }: Props) {
   const router = useRouter();
   const steps = ONBOARDING_STEPS as OnboardingStep[];
 
@@ -55,7 +52,7 @@ export default function BlueprintOnboarding({ step }: Props) {
     const prev = steps[stepIndex - 1];
     if (!prev) return;
     setDirection("back");
-    router.push("/onboarding/init");;
+    router.push(`/onboarding/${prev.id}`);
   };
 
   const onForwardStart = async () => {
@@ -70,11 +67,6 @@ export default function BlueprintOnboarding({ step }: Props) {
 
   const profile = motionProfileFor(currentStep.id);
 
-  /**
-   * IMPORTANT:
-   * Explicitly type variants as Variants
-   * to satisfy Framer Motion + TS when using `custom`
-   */
   const variants: Variants = {
     initial: (dir: Direction) => ({
       opacity: 0,
@@ -136,6 +128,7 @@ export default function BlueprintOnboarding({ step }: Props) {
           >
             <BlueprintCard
               step={currentStep}
+              context={context}
               isFirst={stepIndex === 0}
               isLast={stepIndex === steps.length - 1}
               onBack={goBack}

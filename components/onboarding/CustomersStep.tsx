@@ -2,21 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import {
-  updateArchitectaOnboarding,
-  setArchitectaOnboardingStep,
-} from "@/lib/onboarding/actions";
+import { saveStepAnswers } from "@/lib/onboarding/actions";
+import StepNavigation from "@/components/onboarding/StepNavigation";
+import { getPreviousStepUrl } from "@/lib/onboarding/steps";
+import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
 
 type CustomersStepProps = {
-  initialProfile: {
-    customer_role?: string | null;
-    customer_pains?: string[] | null;
-    customer_outcome?: string | null;
-  };
-  initialSession: {
-    id: string;
-  };
+  answers: OnboardingAnswers;
+  sessionId: string;
 };
 
 const PAIN_OPTIONS = [
@@ -28,18 +21,21 @@ const PAIN_OPTIONS = [
   "Not converting attention into customers",
 ];
 
-export default function CustomersStep({ initialProfile }: CustomersStepProps) {
+export default function CustomersStep({ answers }: CustomersStepProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const wa = answers.website_analysis;
 
   const [role, setRole] = useState(
-    initialProfile.customer_role ?? ""
+    answers.customer_role ?? wa?.typical_customers ?? wa?.audience ?? ""
   );
   const [pains, setPains] = useState<string[]>(
-    initialProfile.customer_pains ?? []
+    answers.customer_pains ?? []
   );
   const [outcome, setOutcome] = useState(
-    initialProfile.customer_outcome ?? ""
+    answers.customer_outcome ?? ""
   );
 
   const isValid =
@@ -59,21 +55,27 @@ export default function CustomersStep({ initialProfile }: CustomersStepProps) {
     if (!isValid) return;
 
     startTransition(async () => {
-      await updateArchitectaOnboarding({
-        customer_role: role.trim(),
-        customer_pains: pains,
-        customer_outcome: outcome.trim(),
-      });
+      setError(null);
+      const result = await saveStepAnswers(
+        {
+          customer_role: role.trim(),
+          customer_pains: pains,
+          customer_outcome: outcome.trim(),
+        },
+        "customers"
+      );
 
-      await setArchitectaOnboardingStep("customers");
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
 
-      router.push("/onboarding/foundation");
+      router.push(result.next);
     });
   }
 
   return (
     <div className="space-y-10">
-      {/* Header */}
       <div className="space-y-3 text-center">
         <h1 className="text-3xl font-semibold tracking-tight">
           Who are you creating for?
@@ -83,9 +85,7 @@ export default function CustomersStep({ initialProfile }: CustomersStepProps) {
         </p>
       </div>
 
-      {/* Form */}
       <div className="space-y-6">
-        {/* Customer role */}
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">
             Your ideal customer
@@ -99,7 +99,6 @@ export default function CustomersStep({ initialProfile }: CustomersStepProps) {
           />
         </div>
 
-        {/* Pain points */}
         <div className="space-y-3">
           <label className="block text-sm font-medium text-slate-300">
             What are they struggling with?
@@ -128,7 +127,6 @@ export default function CustomersStep({ initialProfile }: CustomersStepProps) {
           </div>
         </div>
 
-        {/* Desired outcome */}
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">
             What outcome do they want?
@@ -143,15 +141,14 @@ export default function CustomersStep({ initialProfile }: CustomersStepProps) {
         </div>
       </div>
 
-      {/* CTA */}
-      <Button
-        size="lg"
-        className="w-full"
-        disabled={!isValid || isPending}
-        onClick={handleContinue}
-      >
-        {isPending ? "Saving…" : "Continue"}
-      </Button>
+      {error && <p className="text-red-400 text-sm">{error}</p>}
+
+      <StepNavigation
+        backUrl={getPreviousStepUrl("customers")}
+        isPending={isPending}
+        isValid={isValid}
+        onContinue={handleContinue}
+      />
     </div>
   );
 }

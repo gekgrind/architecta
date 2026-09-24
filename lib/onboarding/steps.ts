@@ -1,5 +1,11 @@
 import type { OnboardingStep } from "./types";
 
+export function getPreviousStepUrl(currentStepId: string): string | null {
+  const idx = ONBOARDING_STEPS.findIndex((s) => s.id === currentStepId);
+  if (idx <= 0) return null;
+  return `/onboarding/${ONBOARDING_STEPS[idx - 1].id}`;
+}
+
 export type OnboardingStepId =
   | "welcome"
   | "source"

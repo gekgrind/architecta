@@ -2,39 +2,39 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import {
-  updateArchitectaOnboarding,
-  setArchitectaOnboardingStep,
-} from "@/lib/onboarding/actions";
+import { saveStepAnswers } from "@/lib/onboarding/actions";
 import AISuggestions from "@/components/onboarding/AISuggestions";
+import StepNavigation from "@/components/onboarding/StepNavigation";
+import { getPreviousStepUrl } from "@/lib/onboarding/steps";
+import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
 
 type SnapshotStepProps = {
-  initialProfile: {
-    brand_name?: string | null;
-    industry?: string | null;
-    description?: string | null;
-  };
-  initialSession: {
-    id: string;
-  };
+  answers: OnboardingAnswers;
+  sessionId: string;
+  hasExistingContext: boolean;
 };
 
 export default function SnapshotStep({
-  initialProfile,
+  answers,
+  hasExistingContext,
 }: SnapshotStepProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const wa = answers.website_analysis;
 
   const [brandName, setBrandName] = useState(
-    initialProfile.brand_name ?? ""
+    answers.brand_name ?? wa?.brand_name ?? ""
   );
   const [industry, setIndustry] = useState(
-    initialProfile.industry ?? ""
+    answers.industry ?? wa?.industry ?? ""
   );
   const [description, setDescription] = useState(
-    initialProfile.description ?? ""
+    answers.description ?? wa?.description ?? ""
   );
+
+  const prefilled = hasExistingContext || !!wa;
 
   const isValid =
     brandName.trim().length > 0 &&
@@ -45,23 +45,27 @@ export default function SnapshotStep({
     if (!isValid) return;
 
     startTransition(async () => {
-      // Save snapshot fields
-      await updateArchitectaOnboarding({
-        brand_name: brandName.trim(),
-        industry: industry.trim(),
-        description: description.trim(),
-      });
+      setError(null);
+      const result = await saveStepAnswers(
+        {
+          brand_name: brandName.trim(),
+          industry: industry.trim(),
+          description: description.trim(),
+        },
+        "snapshot"
+      );
 
-      // Advance step
-      await setArchitectaOnboardingStep("snapshot");
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
 
-      router.push("/onboarding/market");
+      router.push(result.next);
     });
   }
 
   return (
     <div className="space-y-10">
-      {/* Header */}
       <div className="space-y-3 text-center">
         <h1 className="text-3xl font-semibold tracking-tight">
           Brand snapshot
@@ -71,9 +75,17 @@ export default function SnapshotStep({
         </p>
       </div>
 
-      {/* Form */}
+      {prefilled && (
+        <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4">
+          <p className="text-sm text-indigo-300">
+            {wa
+              ? "Pre-filled from your website analysis. Review and adjust anything that doesn't look right."
+              : "Pre-filled from your Entrepreneuria profile. Review and adjust as needed."}
+          </p>
+        </div>
+      )}
+
       <div className="space-y-6">
-        {/* Brand name */}
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">
             Brand or business name
@@ -87,7 +99,6 @@ export default function SnapshotStep({
           />
         </div>
 
-        {/* Industry */}
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">
             Industry
@@ -101,7 +112,6 @@ export default function SnapshotStep({
           />
         </div>
 
-        {/* Description */}
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">
             What do you do?
@@ -117,23 +127,22 @@ export default function SnapshotStep({
       </div>
 
       <AISuggestions
-  step="snapshot"
-  context={{
-    brand_name: brandName,
-    industry,
-  }}
-  onApply={(text) => setDescription(text)}
-/>
+        step="snapshot"
+        context={{
+          brand_name: brandName,
+          industry,
+        }}
+        onApply={(text) => setDescription(text)}
+      />
 
-      {/* CTA */}
-      <Button
-        size="lg"
-        className="w-full"
-        disabled={!isValid || isPending}
-        onClick={handleContinue}
-      >
-        {isPending ? "Saving…" : "Continue"}
-      </Button>
+      {error && <p className="text-red-400 text-sm">{error}</p>}
+
+      <StepNavigation
+        backUrl={getPreviousStepUrl("snapshot")}
+        isPending={isPending}
+        isValid={isValid}
+        onContinue={handleContinue}
+      />
     </div>
   );
 }

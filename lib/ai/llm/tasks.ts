@@ -33,6 +33,7 @@ export const TASK_ROUTES: Record<TaskType, TaskRoute> = {
   POST_GENERATION:       { draft: GPT_4O_MINI, standard: SONNET,    premium: OPUS },
   POST_REVISION:         { draft: GPT_4O_MINI, standard: GPT_4O,    premium: SONNET },
   CAMPAIGN_PLAN:         { draft: GPT_41_MINI, standard: SONNET,    premium: OPUS },
+  WEBSITE_ANALYSIS:      { draft: GPT_4O_MINI, standard: GPT_4O,    premium: SONNET },
 };
 
 export function normalizeTier(tier?: QualityTier): QualityTier {

@@ -1,21 +1,13 @@
 /* =========================================================
-   BASE RESET
+   BASE RESET — scoped to Blueprint card
+   (Tailwind preflight handles the global reset)
 ========================================================= */
 
-* {
-  margin: 0;
-  padding: 0;
+.onboarding-container,
+.onboarding-container *,
+.blueprint-card,
+.blueprint-card * {
   box-sizing: border-box;
-}
-
-/* NOTE:
-   DO NOT rely on body styles for layout in Next.
-   Prism already owns the background.
-*/
-body {
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  color: #fff;
-  overflow-x: hidden;
 }
 
 /* =========================================================

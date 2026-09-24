@@ -2,14 +2,15 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { setArchitectaOnboardingStep } from "@/lib/onboarding/actions";
+import { saveStepAnswers } from "@/lib/onboarding/actions";
+import StepNavigation from "@/components/onboarding/StepNavigation";
+import { getPreviousStepUrl } from "@/lib/onboarding/steps";
+import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
 
 type ReviewStepProps = {
-  initialProfile: Record<string, string | string[] | null | undefined>;
-  initialSession: {
-    id: string;
-  };
+  answers: OnboardingAnswers;
+  sessionId: string;
+  hasExistingContext: boolean;
 };
 
 function ReviewItem({
@@ -33,60 +34,126 @@ function ReviewItem({
   );
 }
 
-export default function ReviewStep({ initialProfile }: ReviewStepProps) {
+function ReviewSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-medium text-indigo-400 uppercase tracking-wide">
+        {title}
+      </h3>
+      <div className="space-y-4">{children}</div>
+    </div>
+  );
+}
+
+export default function ReviewStep({
+  answers,
+  hasExistingContext,
+}: ReviewStepProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   function handleGenerate() {
     startTransition(async () => {
-      await setArchitectaOnboardingStep("review");
-      router.push("/onboarding/finish");
+      const result = await saveStepAnswers({}, "review");
+
+      if (!result.ok) return;
+
+      router.push(result.next);
     });
   }
 
+  const hasData = !!(
+    answers.brand_name ||
+    answers.industry ||
+    answers.description ||
+    answers.customer_role
+  );
+
   return (
     <div className="space-y-10">
-      {/* Header */}
       <div className="space-y-3 text-center">
         <h1 className="text-3xl font-semibold tracking-tight">
           Review your setup
         </h1>
         <p className="text-slate-400 text-lg">
-          This is the system Architecta will generate from.
+          Architecta will generate your content system from this.
         </p>
       </div>
 
-      {/* Summary */}
-      <div className="space-y-6 rounded-xl border border-slate-800 bg-slate-900/60 p-6">
-        <ReviewItem label="Brand name" value={initialProfile.brand_name} />
-        <ReviewItem label="Industry" value={initialProfile.industry} />
-        <ReviewItem label="Description" value={initialProfile.description} />
+      {hasExistingContext && (
+        <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4">
+          <p className="text-sm text-indigo-300">
+            Some of this was pre-filled from your Entrepreneuria profile
+            {answers.website_analysis ? " and website analysis" : ""}.
+            You can go back to any step to make changes.
+          </p>
+        </div>
+      )}
 
-        <ReviewItem label="Primary market" value={initialProfile.primary_market} />
-        <ReviewItem label="Niche" value={initialProfile.niche} />
-        <ReviewItem label="Competitors" value={initialProfile.competitors} />
+      {!hasData && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+          <p className="text-sm text-amber-300">
+            It looks like some information might be missing. You can go back to fill in more details, or continue to generate with what you have.
+          </p>
+        </div>
+      )}
 
-        <ReviewItem label="Customer" value={initialProfile.customer_role} />
-        <ReviewItem label="Pain points" value={initialProfile.customer_pains} />
-        <ReviewItem label="Desired outcome" value={initialProfile.customer_outcome} />
+      <div className="space-y-8 rounded-xl border border-slate-800 bg-slate-900/60 p-6">
+        <ReviewSection title="Business">
+          <ReviewItem label="Brand name" value={answers.brand_name} />
+          <ReviewItem label="Industry" value={answers.industry} />
+          <ReviewItem label="Description" value={answers.description} />
+          <ReviewItem label="Website" value={answers.website_url} />
+        </ReviewSection>
 
-        <ReviewItem label="Values" value={initialProfile.brand_values} />
-        <ReviewItem label="Voice tone" value={initialProfile.voice_tone} />
-        <ReviewItem label="Visual style" value={initialProfile.visual_style} />
-        <ReviewItem label="Primary colors" value={initialProfile.primary_colors} />
+        <ReviewSection title="Audience">
+          <ReviewItem label="Primary market" value={answers.primary_market} />
+          <ReviewItem label="Niche" value={answers.niche} />
+          <ReviewItem label="Ideal customer" value={answers.customer_role} />
+          <ReviewItem label="Pain points" value={answers.customer_pains} />
+          <ReviewItem label="Desired outcome" value={answers.customer_outcome} />
+          <ReviewItem label="Competitors" value={answers.competitors} />
+        </ReviewSection>
+
+        <ReviewSection title="Brand & voice">
+          <ReviewItem label="Values" value={answers.brand_values} />
+          <ReviewItem label="Voice tone" value={answers.voice_tone} />
+          <ReviewItem label="Words to use" value={answers.words_to_use} />
+          <ReviewItem label="Words to avoid" value={answers.words_to_avoid} />
+          <ReviewItem label="Reference brands" value={answers.reference_brands} />
+        </ReviewSection>
+
+        <ReviewSection title="Visual identity">
+          <ReviewItem label="Visual style" value={answers.visual_style} />
+          <ReviewItem label="Primary colors" value={answers.primary_colors} />
+          <ReviewItem
+            label="Has logo"
+            value={
+              answers.has_logo === true
+                ? "Yes"
+                : answers.has_logo === false
+                ? "No"
+                : null
+            }
+          />
+        </ReviewSection>
       </div>
 
-      {/* CTA */}
-      <Button
-        size="lg"
-        className="w-full"
-        disabled={isPending}
-        onClick={handleGenerate}
-      >
-        {isPending ? "Preparing…" : "Generate my content system"}
-      </Button>
+      <StepNavigation
+        backUrl={getPreviousStepUrl("review")}
+        isPending={isPending}
+        isValid={true}
+        onContinue={handleGenerate}
+        continueLabel="Generate my content system"
+        pendingLabel="Preparing…"
+      />
 
-      {/* Subtext */}
       <p className="text-center text-sm text-slate-500">
         You can edit any of this later inside Architecta.
       </p>

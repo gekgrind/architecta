@@ -1,104 +1,172 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateArchitectaOnboarding, advanceArchitectaOnboardingStepClient } from "@/lib/onboarding/actions";
+import { Button } from "@/components/ui/button";
+import { saveStepAnswers, runWebsiteAnalysis } from "@/lib/onboarding/actions";
+import { getPreviousStepUrl } from "@/lib/onboarding/steps";
+import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
 
 type WebsiteStepProps = {
-  initialProfile: {
-    has_website?: boolean | null;
-    website_url?: string | null;
-  };
-  initialSession: {
-    flags?: {
-      hasWebsite?: boolean | null;
-    } | null;
-  };
+  answers: OnboardingAnswers;
+  hasExistingContext: boolean;
+  existingWebsiteUrl: string | null;
+  sessionId: string;
 };
 
-export default function WebsiteStep({ initialProfile, initialSession }: WebsiteStepProps) {
+export default function WebsiteStep({
+  answers,
+  hasExistingContext,
+  existingWebsiteUrl,
+}: WebsiteStepProps) {
   const router = useRouter();
-  const [hasWebsite, setHasWebsite] = useState<boolean | null>(
-    initialProfile.has_website ?? initialSession.flags?.hasWebsite ?? null
-  );
-  const [websiteUrl, setWebsiteUrl] = useState(initialProfile.website_url ?? "");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
-  async function onContinue() {
-    setLoading(true);
+  const [hasWebsite, setHasWebsite] = useState<boolean | null>(
+    answers.has_website ?? (existingWebsiteUrl ? true : null)
+  );
+  const [websiteUrl, setWebsiteUrl] = useState(
+    answers.website_url ?? existingWebsiteUrl ?? ""
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisStatus, setAnalysisStatus] = useState<string | null>(null);
+
+  async function handleAnalyzeAndContinue() {
     setError(null);
 
-    const updateRes = await updateArchitectaOnboarding({
-      has_website: hasWebsite,
-      website_url: websiteUrl
+    if (hasWebsite && websiteUrl.trim()) {
+      setAnalyzing(true);
+      setAnalysisStatus("Analyzing your website…");
+
+      const analysisResult = await runWebsiteAnalysis(websiteUrl.trim());
+
+      setAnalyzing(false);
+      setAnalysisStatus(null);
+
+      if (!analysisResult.ok) {
+        setError(`Website analysis failed: ${analysisResult.error}. You can continue manually.`);
+      }
+    }
+
+    startTransition(async () => {
+      const result = await saveStepAnswers(
+        {
+          has_website: hasWebsite ?? false,
+          website_url: hasWebsite ? websiteUrl.trim() : undefined,
+        },
+        "website"
+      );
+
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+
+      router.push(result.next);
     });
-
-    if (!updateRes.ok) {
-      setError(updateRes.error ?? "Something went wrong");
-      setLoading(false);
-      return;
-    }
-
-    const res = await advanceArchitectaOnboardingStepClient("website");
-    setLoading(false);
-
-    if (!res.ok) {
-      setError(res.error ?? "Something went wrong");
-      return;
-    }
-    if (res.next) {
-      router.push(res.next);
-    }
   }
 
-  return (
-    <div className="max-w-2xl mx-auto py-10 px-6">
-      <h1 className="text-3xl font-semibold">Connect your website</h1>
-      <p className="text-slate-300 mt-2">
-        If you connect your site, Architecta can auto-build most of your Brand Kit.
-      </p>
+  const urlPrefilled = existingWebsiteUrl && websiteUrl === existingWebsiteUrl;
 
-      <div className="mt-6 space-y-3">
+  return (
+    <div className="max-w-2xl mx-auto py-10 px-6 space-y-8">
+      <div className="space-y-3 text-center">
+        <h1 className="text-3xl font-semibold tracking-tight">
+          Connect your website
+        </h1>
+        <p className="text-slate-400 text-lg">
+          If you connect your site, Architecta can auto-build most of your Brand Kit.
+        </p>
+      </div>
+
+      {hasExistingContext && existingWebsiteUrl && (
+        <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4">
+          <p className="text-sm text-indigo-300">
+            We found your website from your Entrepreneuria profile. Architecta will analyze it to learn about your brand.
+          </p>
+        </div>
+      )}
+
+      <div className="space-y-3">
         <button
-          className={`w-full rounded-xl border p-4 text-left ${hasWebsite === true ? "border-white" : "border-slate-800"}`}
+          className={`w-full rounded-xl border p-4 text-left transition ${
+            hasWebsite === true ? "border-indigo-500 bg-indigo-500/10" : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
+          }`}
           onClick={() => setHasWebsite(true)}
         >
-          🌍 I have a website
+          <span className="font-medium text-white">I have a website</span>
         </button>
         <button
-          className={`w-full rounded-xl border p-4 text-left ${hasWebsite === false ? "border-white" : "border-slate-800"}`}
+          className={`w-full rounded-xl border p-4 text-left transition ${
+            hasWebsite === false ? "border-indigo-500 bg-indigo-500/10" : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
+          }`}
           onClick={() => setHasWebsite(false)}
         >
-          📁 I don’t have a website yet
+          <span className="font-medium text-white">I don&apos;t have a website yet</span>
         </button>
       </div>
 
       {hasWebsite === true && (
-        <div className="mt-6">
+        <div className="space-y-2">
           <label className="text-sm text-slate-300">Website URL</label>
           <input
             value={websiteUrl}
             onChange={(e) => setWebsiteUrl(e.target.value)}
             placeholder="https://yourdomain.com"
-            className="mt-2 w-full rounded-xl bg-slate-900 border border-slate-800 p-3"
+            className="w-full rounded-xl bg-slate-900 border border-slate-800 p-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
           />
-          <p className="text-xs text-slate-400 mt-2">
-            Tip: include the homepage. Architecta can find the rest.
+          {urlPrefilled && (
+            <p className="text-xs text-indigo-400">
+              Pre-filled from your Entrepreneuria profile
+            </p>
+          )}
+          <p className="text-xs text-slate-500">
+            Architecta will analyze your homepage to extract brand and marketing context.
           </p>
         </div>
       )}
 
-      {error && <p className="mt-4 text-red-400">{error}</p>}
+      {analysisStatus && (
+        <div className="flex items-center gap-3 text-slate-300">
+          <div className="h-5 w-5 rounded-full border-2 border-slate-700 border-t-indigo-500 animate-spin" />
+          <span className="text-sm">{analysisStatus}</span>
+        </div>
+      )}
 
-      <div className="mt-8 flex justify-end">
-        <button
-          disabled={loading || hasWebsite === null || (hasWebsite === true && !websiteUrl)}
-          onClick={onContinue}
-          className="rounded-xl bg-white text-slate-950 px-5 py-2 font-medium disabled:opacity-50"
+      {error && <p className="text-red-400 text-sm">{error}</p>}
+
+      <div className="flex gap-3">
+        {getPreviousStepUrl("website") && (
+          <Button
+            variant="outline"
+            size="lg"
+            className="flex-shrink-0"
+            disabled={isPending || analyzing}
+            onClick={() => router.push(getPreviousStepUrl("website")!)}
+          >
+            Back
+          </Button>
+        )}
+        <Button
+          size="lg"
+          className="w-full"
+          disabled={
+            isPending ||
+            analyzing ||
+            hasWebsite === null ||
+            (hasWebsite === true && !websiteUrl.trim())
+          }
+          onClick={handleAnalyzeAndContinue}
         >
-          {loading ? "Saving…" : "Continue"}
-        </button>
+          {analyzing
+            ? "Analyzing website…"
+            : isPending
+            ? "Saving…"
+            : hasWebsite
+            ? "Analyze & continue"
+            : "Continue"}
+        </Button>
       </div>
     </div>
   );
