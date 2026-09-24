@@ -65,12 +65,8 @@ export default function BlueprintCard({
       <div className="card-content">
         <div className="card-number">STEP {step.number}</div>
 
-        {isWelcome && (
-          <>
-            <h2 className="question">{step.title}</h2>
-            {step.subtitle && <p className="subhead">{step.subtitle}</p>}
-          </>
-        )}
+        <h2 className="question">{step.title}</h2>
+        {step.subtitle && <p className="subhead">{step.subtitle}</p>}
 
         <StepRenderer step={step} context={context} />
 

@@ -11,8 +11,6 @@ vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: h.createSupabaseServerClient,
 }));
 
-const originalFetch = globalThis.fetch;
-
 import { isUnsafeUrl } from "./website-analysis";
 
 /* =======================================================

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
@@ -23,10 +23,24 @@ import {
 
 const USER_ID = "user-test-123";
 
-function makeSupabaseMock(results: Record<string, { data: unknown; error: unknown }> = {}) {
+type MockBuilder = {
+  from: ReturnType<typeof vi.fn>;
+  select: ReturnType<typeof vi.fn>;
+  insert: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
+  upsert: ReturnType<typeof vi.fn>;
+  eq: ReturnType<typeof vi.fn>;
+  single: ReturnType<typeof vi.fn>;
+  maybeSingle: ReturnType<typeof vi.fn>;
+  auth: {
+    getUser: ReturnType<typeof vi.fn>;
+  };
+};
+
+function makeSupabaseMock(results: Record<string, { data: unknown; error: unknown }> = {}): MockBuilder {
   let currentTable = "";
 
-  const builder: Record<string, ReturnType<typeof vi.fn>> = {
+  const builder = {
     from: vi.fn((t: string) => {
       currentTable = t;
       return builder;
@@ -40,7 +54,7 @@ function makeSupabaseMock(results: Record<string, { data: unknown; error: unknow
     maybeSingle: vi.fn(() => Promise.resolve(results[currentTable] ?? { data: null, error: null })),
   };
 
-  const supabase = {
+  const supabase: MockBuilder = {
     ...builder,
     auth: {
       getUser: vi.fn(() =>
@@ -56,7 +70,7 @@ function makeSupabaseMock(results: Record<string, { data: unknown; error: unknow
 function makeUnauthenticatedMock() {
   const supabase = makeSupabaseMock();
   supabase.auth.getUser = vi.fn(() =>
-    Promise.resolve({ data: { user: null }, error: null })
+    Promise.resolve({ data: { user: null as null }, error: null })
   );
   return supabase;
 }
