@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { runGateway } from "@/lib/ai/llm/run";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -10,6 +11,17 @@ export async function getOnboardingSuggestions({
   step: string;
   context: Record<string, unknown>;
 }) {
+  if (process.env.NODE_ENV === "development") {
+    const referer = (await headers()).get("referer") ?? "";
+    if (referer.includes("/onboarding/preview")) {
+      return {
+        ok: true as const,
+        suggestions:
+          "Focus on the specific transformation your customers experience.\nUse concrete outcomes over abstract benefits.\nSpeak directly to the founder identity — they want to feel seen, not sold to.",
+      };
+    }
+  }
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },

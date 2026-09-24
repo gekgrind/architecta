@@ -11,6 +11,7 @@ type Props = {
   isLast: boolean;
   onBack?: () => void;
   onForwardStart?: () => void;
+  renderStep?: (step: OnboardingStep, context: OnboardingContext) => React.ReactNode;
 };
 
 export default function BlueprintCard({
@@ -19,6 +20,7 @@ export default function BlueprintCard({
   isFirst,
   onBack,
   onForwardStart,
+  renderStep,
 }: Props) {
   const [active, setActive] = useState(false);
 
@@ -68,7 +70,7 @@ export default function BlueprintCard({
         <h2 className="question">{step.title}</h2>
         {step.subtitle && <p className="subhead">{step.subtitle}</p>}
 
-        <StepRenderer step={step} context={context} />
+        {renderStep ? renderStep(step, context) : <StepRenderer step={step} context={context} />}
 
         {isWelcome && (
           <div className="button-group">

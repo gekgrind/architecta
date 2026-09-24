@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ONBOARDING_STEPS } from "@/lib/onboarding/steps";
 import {
@@ -43,6 +44,15 @@ export async function saveStepAnswers(
   stepAnswers: Partial<OnboardingAnswers>,
   step: ArchitectaOnboardingStep
 ): Promise<{ ok: true; next: string } | { ok: false; error: string }> {
+  if (process.env.NODE_ENV === "development") {
+    const referer = (await headers()).get("referer") ?? "";
+    if (referer.includes("/onboarding/preview")) {
+      const currentIndex = ONBOARDING_STEPS.findIndex((s) => s.id === step);
+      const nextStep = ONBOARDING_STEPS[currentIndex + 1]?.id ?? "finish";
+      return { ok: true, next: `/onboarding/preview?step=${nextStep}` };
+    }
+  }
+
   const { session } = await getOrCreateArchitectaOnboarding();
 
   const result = await saveOnboardingProgress(session.id, stepAnswers, step);
@@ -158,6 +168,32 @@ export async function loadOnboardingContext() {
 ======================================================= */
 
 export async function runWebsiteAnalysis(url: string) {
+  if (process.env.NODE_ENV === "development") {
+    const referer = (await headers()).get("referer") ?? "";
+    if (referer.includes("/onboarding/preview")) {
+      return {
+        ok: true as const,
+        analysis: {
+          brand_name: "Acme Studio",
+          industry: "B2B SaaS",
+          description: "Strategic content tools for modern founders",
+          audience: "Solo founders, indie hackers, and bootstrapped teams",
+          offers: "Brand kit generation, content strategy templates",
+          tone: "Direct, confident, practical",
+          voice_characteristics: "Clear, no-fluff, founder-to-founder",
+          topics: ["brand building", "content strategy", "growth marketing"],
+          mission: "Make brand-building accessible to every founder.",
+          values: "Clarity, Integrity, Simplicity",
+          differentiators: ["Built for solo founders", "System-first approach"],
+          cta_patterns: ["Start building", "Get your brand kit"],
+          typical_customers: "Solo founders and small bootstrapped teams",
+          confidence: "high" as const,
+          analyzed_at: new Date().toISOString(),
+        },
+      };
+    }
+  }
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
