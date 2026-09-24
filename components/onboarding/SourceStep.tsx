@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { setArchitectaOnboardingStep } from "@/lib/onboarding/actions";
-import { updateArchitectaOnboarding } from "@/lib/onboarding/actions";
+import { saveStepAnswers } from "@/lib/onboarding/actions";
+import StepNavigation from "@/components/onboarding/StepNavigation";
+import { getPreviousStepUrl } from "@/lib/onboarding/steps";
 
 type SourceOption =
   | "new"
@@ -45,40 +45,30 @@ const OPTIONS: {
   },
 ];
 
-export default function SourcePage() {
+export default function SourceStep() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [selected, setSelected] = useState<SourceOption | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   function handleContinue() {
     if (!selected) return;
 
     startTransition(async () => {
-      // Save answer
-      await updateArchitectaOnboarding({
-        source_type: selected,
-      });
+      setError(null);
+      const result = await saveStepAnswers({ source_type: selected }, "source");
 
-      // Advance step
-      await setArchitectaOnboardingStep("source");
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
 
-      router.push("/onboarding/website");
+      router.push(result.next);
     });
   }
 
   return (
-    <div className="space-y-10">
-      {/* Header */}
-      <div className="space-y-3 text-center">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Where are you starting from?
-        </h1>
-        <p className="text-slate-400 text-lg">
-          This helps Architecta design the right system for you.
-        </p>
-      </div>
-
-      {/* Options */}
+    <div className="space-y-6">
       <div className="space-y-3">
         {OPTIONS.map((option) => {
           const isActive = selected === option.id;
@@ -106,15 +96,14 @@ export default function SourcePage() {
         })}
       </div>
 
-      {/* CTA */}
-      <Button
-        size="lg"
-        className="w-full"
-        disabled={!selected || isPending}
-        onClick={handleContinue}
-      >
-        {isPending ? "Saving…" : "Continue"}
-      </Button>
+      {error && <p className="text-red-400 text-sm">{error}</p>}
+
+      <StepNavigation
+        backUrl={getPreviousStepUrl("source")}
+        isPending={isPending}
+        isValid={!!selected}
+        onContinue={handleContinue}
+      />
     </div>
   );
 }

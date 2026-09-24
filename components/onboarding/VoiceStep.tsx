@@ -2,22 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import {
-  updateArchitectaOnboarding,
-  setArchitectaOnboardingStep,
-} from "@/lib/onboarding/actions";
+import { saveStepAnswers } from "@/lib/onboarding/actions";
+import StepNavigation from "@/components/onboarding/StepNavigation";
+import { getPreviousStepUrl } from "@/lib/onboarding/steps";
+import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
 
 type VoiceStepProps = {
-  initialProfile: {
-    voice_tone?: string | null;
-    words_to_use?: string[] | null;
-    words_to_avoid?: string[] | null;
-    reference_brands?: string[] | null;
-  };
-  initialSession: {
-    id: string;
-  };
+  answers: OnboardingAnswers;
+  sessionId: string;
 };
 
 const TONE_OPTIONS = [
@@ -28,24 +20,27 @@ const TONE_OPTIONS = [
   { id: "inspiring", label: "Inspiring & aspirational" },
 ];
 
-export default function VoiceStep({ initialProfile }: VoiceStepProps) {
+export default function VoiceStep({ answers }: VoiceStepProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const wa = answers.website_analysis;
 
   const [tone, setTone] = useState(
-    initialProfile.voice_tone ?? ""
+    answers.voice_tone ?? ""
   );
 
   const [wordsToUse, setWordsToUse] = useState(
-    (initialProfile.words_to_use ?? []).join(", ")
+    (answers.words_to_use ?? []).join(", ")
   );
 
   const [wordsToAvoid, setWordsToAvoid] = useState(
-    (initialProfile.words_to_avoid ?? []).join(", ")
+    (answers.words_to_avoid ?? []).join(", ")
   );
 
   const [references, setReferences] = useState(
-    (initialProfile.reference_brands ?? []).join(", ")
+    (answers.reference_brands ?? []).join(", ")
   );
 
   const isValid = tone.length > 0;
@@ -54,31 +49,37 @@ export default function VoiceStep({ initialProfile }: VoiceStepProps) {
     if (!isValid) return;
 
     startTransition(async () => {
-      await updateArchitectaOnboarding({
-        voice_tone: tone,
-        words_to_use: wordsToUse
-          .split(",")
-          .map((w) => w.trim())
-          .filter(Boolean),
-        words_to_avoid: wordsToAvoid
-          .split(",")
-          .map((w) => w.trim())
-          .filter(Boolean),
-        reference_brands: references
-          .split(",")
-          .map((r) => r.trim())
-          .filter(Boolean),
-      });
+      setError(null);
+      const result = await saveStepAnswers(
+        {
+          voice_tone: tone,
+          words_to_use: wordsToUse
+            .split(",")
+            .map((w) => w.trim())
+            .filter(Boolean),
+          words_to_avoid: wordsToAvoid
+            .split(",")
+            .map((w) => w.trim())
+            .filter(Boolean),
+          reference_brands: references
+            .split(",")
+            .map((r) => r.trim())
+            .filter(Boolean),
+        },
+        "voice"
+      );
 
-      await setArchitectaOnboardingStep("voice");
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
 
-      router.push("/onboarding/visuals");
+      router.push(result.next);
     });
   }
 
   return (
     <div className="space-y-10">
-      {/* Header */}
       <div className="space-y-3 text-center">
         <h1 className="text-3xl font-semibold tracking-tight">
           Voice & messaging
@@ -88,7 +89,15 @@ export default function VoiceStep({ initialProfile }: VoiceStepProps) {
         </p>
       </div>
 
-      {/* Tone selection */}
+      {wa?.tone && !answers.voice_tone && (
+        <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4">
+          <p className="text-sm text-indigo-300">
+            Based on your website, your tone appears to be: <strong>{wa.tone}</strong>
+            {wa.voice_characteristics ? ` — ${wa.voice_characteristics}` : ""}
+          </p>
+        </div>
+      )}
+
       <div className="space-y-4">
         <label className="block text-sm font-medium text-slate-300">
           Overall tone
@@ -119,7 +128,6 @@ export default function VoiceStep({ initialProfile }: VoiceStepProps) {
         </div>
       </div>
 
-      {/* Language preferences */}
       <div className="space-y-4">
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">
@@ -164,15 +172,14 @@ export default function VoiceStep({ initialProfile }: VoiceStepProps) {
         </div>
       </div>
 
-      {/* CTA */}
-      <Button
-        size="lg"
-        className="w-full"
-        disabled={!isValid || isPending}
-        onClick={handleContinue}
-      >
-        {isPending ? "Saving…" : "Continue"}
-      </Button>
+      {error && <p className="text-red-400 text-sm">{error}</p>}
+
+      <StepNavigation
+        backUrl={getPreviousStepUrl("voice")}
+        isPending={isPending}
+        isValid={isValid}
+        onContinue={handleContinue}
+      />
     </div>
   );
 }

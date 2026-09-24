@@ -4,9 +4,18 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ONBOARDING_STEPS } from "@/lib/onboarding/steps";
 import {
   getOrCreateArchitectaOnboarding,
-  setOnboardingFlag,
   updateOnboardingStep,
 } from "./server";
+import {
+  saveOnboardingProgress,
+  loadSharedBusinessContext,
+  loadArchitectaBrandProfile,
+  loadOnboardingSession,
+  buildPrefillFromSharedContext,
+  completeArchitectaOnboardingWithData,
+  type OnboardingAnswers,
+} from "./persistence";
+import { analyzeWebsite } from "./website-analysis";
 
 /* =======================================================
    Types
@@ -26,28 +35,43 @@ export type ArchitectaOnboardingStep =
   | "finish";
 
 /* =======================================================
-   Generic helpers (used by ALL onboarding steps)
+   Save step answers to onboarding_sessions.answers JSONB
+======================================================= */
+
+export async function saveStepAnswers(
+  stepAnswers: Partial<OnboardingAnswers>,
+  step: ArchitectaOnboardingStep
+): Promise<{ ok: true; next: string } | { ok: false; error: string }> {
+  const { session } = await getOrCreateArchitectaOnboarding();
+
+  const result = await saveOnboardingProgress(session.id, stepAnswers, step);
+
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+
+  const currentIndex = ONBOARDING_STEPS.findIndex((s) => s.id === step);
+  const nextStep = ONBOARDING_STEPS[currentIndex + 1]?.id ?? "finish";
+
+  await updateOnboardingStep(nextStep as ArchitectaOnboardingStep, false);
+
+  return { ok: true, next: `/onboarding/${nextStep}` };
+}
+
+/* =======================================================
+   Legacy: updateArchitectaOnboarding (now routes to answers JSONB)
 ======================================================= */
 
 export async function updateArchitectaOnboarding(data: Record<string, unknown>) {
-  const supabase = await createSupabaseServerClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { ok: false, error: "Not authenticated" };
-
   const { session } = await getOrCreateArchitectaOnboarding();
 
-  const { error } = await supabase
-    .from("onboarding_sessions")
-    .update(data)
-    .eq("id", session.id);
+  const result = await saveOnboardingProgress(
+    session.id,
+    data as Partial<OnboardingAnswers>,
+    (session.current_step ?? "welcome") as ArchitectaOnboardingStep
+  );
 
-  if (error) return { ok: false, error: error.message };
-
-  return { ok: true };
+  return result;
 }
 
 export async function setArchitectaOnboardingStep(step: ArchitectaOnboardingStep) {
@@ -58,11 +82,6 @@ export async function setArchitectaOnboardingStep(step: ArchitectaOnboardingStep
    Blueprint onboarding: Continue → persist → (client) navigate
 ======================================================= */
 
-/**
- * Use this for animated transitions:
- * - persists next step
- * - returns next URL (NO redirect here)
- */
 export async function advanceArchitectaOnboardingStepClient(
   currentStep: ArchitectaOnboardingStep
 ) {
@@ -88,71 +107,93 @@ export async function advanceArchitectaOnboardingStepClient(
 }
 
 /* =======================================================
-   Import brand data from Prospra
+   Load onboarding context (shared profile + brand + session)
 ======================================================= */
 
-export async function importFromProspra() {
-  const supabase = await createSupabaseServerClient();
+export async function loadOnboardingContext() {
+  const [shared, brand, session] = await Promise.all([
+    loadSharedBusinessContext(),
+    loadArchitectaBrandProfile(),
+    loadOnboardingSession(),
+  ]);
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const prefill = buildPrefillFromSharedContext(shared, brand);
 
-  if (!user) return { ok: false, error: "Not authenticated" };
+  const answers: OnboardingAnswers = {
+    ...prefill,
+    ...(session?.answers ?? {}),
+  };
 
-  const { data: prospra, error } = await supabase
-    .from("prospra_brand_profiles")
-    .select("*")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const hasExistingContext = !!(
+    shared?.industry ||
+    shared?.name ||
+    shared?.website_url ||
+    shared?.audience ||
+    shared?.offer ||
+    shared?.business_idea
+  );
 
-  if (error) return { ok: false, error: error.message };
-  if (!prospra) return { ok: false, error: "No Prospra data found." };
+  const hasWebsiteUrl = !!(
+    answers.website_url ||
+    shared?.website_url ||
+    shared?.website ||
+    brand?.website
+  );
 
-  const { error: updateError } = await supabase
-    .from("brand_profiles")
-    .update({
-      brand_name: prospra.brand_name,
-      offers: prospra.offers,
-      mission: prospra.mission,
-      vision: prospra.vision,
-      values: prospra.values,
-      tone_voice: prospra.tone_voice,
-      source: { fromProspra: true },
-    })
-    .eq("user_id", user.id);
-
-  if (updateError) return { ok: false, error: updateError.message };
-
-  await setOnboardingFlag("usedProspra", true);
-  await updateOnboardingStep("source", true);
-
-  return { ok: true, next: "/onboarding/website" };
+  return {
+    shared,
+    brand,
+    session,
+    answers,
+    prefill,
+    hasExistingContext,
+    hasWebsiteUrl,
+    websiteUrl: answers.website_url ?? shared?.website_url ?? shared?.website ?? brand?.website ?? null,
+  };
 }
 
 /* =======================================================
-   Complete Architecta onboarding
+   Website Analysis (server action)
 ======================================================= */
 
-export async function completeOnboarding() {
+export async function runWebsiteAnalysis(url: string) {
   const supabase = await createSupabaseServerClient();
-
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) return { ok: false, error: "Not authenticated" };
+  if (!user) return { ok: false as const, error: "Not authenticated" };
 
-  const { error } = await supabase
-    .from("onboarding_sessions")
-    .update({
-      status: "completed",
-      current_step: "finish",
-    })
-    .eq("user_id", user.id)
-    .eq("app", "architecta");
+  const result = await analyzeWebsite(user.id, url);
 
-  if (error) return { ok: false, error: error.message };
+  if (!result.ok) {
+    return { ok: false as const, error: result.error };
+  }
 
-  return { ok: true, next: "/studio" };
+  const { session } = await getOrCreateArchitectaOnboarding();
+
+  await saveOnboardingProgress(
+    session.id,
+    { website_analysis: result.analysis },
+    "website"
+  );
+
+  return { ok: true as const, analysis: result.analysis };
+}
+
+/* =======================================================
+   Complete Onboarding (final persistence)
+======================================================= */
+
+export async function completeOnboarding() {
+  const session = await loadOnboardingSession();
+  if (!session) return { ok: false, error: "No onboarding session found" };
+
+  const result = await completeArchitectaOnboardingWithData(session.answers);
+
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+
+  return { ok: true, next: "/dashboard" };
 }

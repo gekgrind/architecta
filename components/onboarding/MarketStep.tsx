@@ -2,35 +2,29 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import {
-  updateArchitectaOnboarding,
-  setArchitectaOnboardingStep,
-} from "@/lib/onboarding/actions";
+import { saveStepAnswers } from "@/lib/onboarding/actions";
+import StepNavigation from "@/components/onboarding/StepNavigation";
+import { getPreviousStepUrl } from "@/lib/onboarding/steps";
+import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
 
 type MarketStepProps = {
-  initialProfile: {
-    primary_market?: string | null;
-    niche?: string | null;
-    competitors?: string[] | null;
-  };
-  initialSession: {
-    id: string;
-  };
+  answers: OnboardingAnswers;
+  sessionId: string;
 };
 
-export default function MarketStep({ initialProfile }: MarketStepProps) {
+export default function MarketStep({ answers }: MarketStepProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   const [primaryMarket, setPrimaryMarket] = useState(
-    initialProfile.primary_market ?? ""
+    answers.primary_market ?? ""
   );
   const [niche, setNiche] = useState(
-    initialProfile.niche ?? ""
+    answers.niche ?? ""
   );
   const [competitors, setCompetitors] = useState(
-    (initialProfile.competitors ?? []).join(", ")
+    (answers.competitors ?? []).join(", ")
   );
 
   const isValid =
@@ -41,24 +35,30 @@ export default function MarketStep({ initialProfile }: MarketStepProps) {
     if (!isValid) return;
 
     startTransition(async () => {
-      await updateArchitectaOnboarding({
-        primary_market: primaryMarket.trim(),
-        niche: niche.trim(),
-        competitors: competitors
-          .split(",")
-          .map((c) => c.trim())
-          .filter(Boolean),
-      });
+      setError(null);
+      const result = await saveStepAnswers(
+        {
+          primary_market: primaryMarket.trim(),
+          niche: niche.trim(),
+          competitors: competitors
+            .split(",")
+            .map((c) => c.trim())
+            .filter(Boolean),
+        },
+        "market"
+      );
 
-      await setArchitectaOnboardingStep("market");
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
 
-      router.push("/onboarding/customers");
+      router.push(result.next);
     });
   }
 
   return (
     <div className="space-y-10">
-      {/* Header */}
       <div className="space-y-3 text-center">
         <h1 className="text-3xl font-semibold tracking-tight">
           Market & positioning
@@ -68,9 +68,7 @@ export default function MarketStep({ initialProfile }: MarketStepProps) {
         </p>
       </div>
 
-      {/* Form */}
       <div className="space-y-6">
-        {/* Primary market */}
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">
             Primary market
@@ -84,7 +82,6 @@ export default function MarketStep({ initialProfile }: MarketStepProps) {
           />
         </div>
 
-        {/* Niche */}
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">
             Niche or focus area
@@ -98,7 +95,6 @@ export default function MarketStep({ initialProfile }: MarketStepProps) {
           />
         </div>
 
-        {/* Competitors */}
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">
             Competitors (optional)
@@ -116,15 +112,14 @@ export default function MarketStep({ initialProfile }: MarketStepProps) {
         </div>
       </div>
 
-      {/* CTA */}
-      <Button
-        size="lg"
-        className="w-full"
-        disabled={!isValid || isPending}
-        onClick={handleContinue}
-      >
-        {isPending ? "Saving…" : "Continue"}
-      </Button>
+      {error && <p className="text-red-400 text-sm">{error}</p>}
+
+      <StepNavigation
+        backUrl={getPreviousStepUrl("market")}
+        isPending={isPending}
+        isValid={isValid}
+        onContinue={handleContinue}
+      />
     </div>
   );
 }

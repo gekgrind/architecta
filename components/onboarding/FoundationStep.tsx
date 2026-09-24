@@ -2,24 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import {
-  updateArchitectaOnboarding,
-  setArchitectaOnboardingStep,
-} from "@/lib/onboarding/actions";
+import { saveStepAnswers } from "@/lib/onboarding/actions";
+import StepNavigation from "@/components/onboarding/StepNavigation";
+import { getPreviousStepUrl } from "@/lib/onboarding/steps";
+import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
 
 type FoundationStepProps = {
-  initialProfile: {
-    brand_values?: string[] | null;
-    brand_personality?: {
-      boldness?: number;
-      tone?: number;
-      authority?: number;
-    } | null;
-  };
-  initialSession: {
-    id: string;
-  };
+  answers: OnboardingAnswers;
+  sessionId: string;
 };
 
 const VALUE_OPTIONS = [
@@ -33,22 +23,23 @@ const VALUE_OPTIONS = [
   "Excellence",
 ];
 
-export default function FoundationStep({ initialProfile }: FoundationStepProps) {
+export default function FoundationStep({ answers }: FoundationStepProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   const [values, setValues] = useState<string[]>(
-    initialProfile.brand_values ?? []
+    answers.brand_values ?? []
   );
 
   const [boldness, setBoldness] = useState(
-    initialProfile.brand_personality?.boldness ?? 50
+    answers.brand_personality?.boldness ?? 50
   );
   const [tone, setTone] = useState(
-    initialProfile.brand_personality?.tone ?? 50
+    answers.brand_personality?.tone ?? 50
   );
   const [authority, setAuthority] = useState(
-    initialProfile.brand_personality?.authority ?? 50
+    answers.brand_personality?.authority ?? 50
   );
 
   const isValid = values.length > 0;
@@ -57,7 +48,7 @@ export default function FoundationStep({ initialProfile }: FoundationStepProps) 
     setValues((prev) =>
       prev.includes(value)
         ? prev.filter((v) => v !== value)
-        : [...prev, value].slice(0, 5) // max 5 values
+        : [...prev, value].slice(0, 5)
     );
   }
 
@@ -65,24 +56,30 @@ export default function FoundationStep({ initialProfile }: FoundationStepProps) 
     if (!isValid) return;
 
     startTransition(async () => {
-      await updateArchitectaOnboarding({
-        brand_values: values,
-        brand_personality: {
-          boldness,
-          tone,
-          authority,
+      setError(null);
+      const result = await saveStepAnswers(
+        {
+          brand_values: values,
+          brand_personality: {
+            boldness,
+            tone,
+            authority,
+          },
         },
-      });
+        "foundation"
+      );
 
-      await setArchitectaOnboardingStep("foundation");
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
 
-      router.push("/onboarding/voice");
+      router.push(result.next);
     });
   }
 
   return (
     <div className="space-y-10">
-      {/* Header */}
       <div className="space-y-3 text-center">
         <h1 className="text-3xl font-semibold tracking-tight">
           Brand foundation
@@ -92,7 +89,6 @@ export default function FoundationStep({ initialProfile }: FoundationStepProps) 
         </p>
       </div>
 
-      {/* Values */}
       <div className="space-y-4">
         <label className="block text-sm font-medium text-slate-300">
           Core values (choose up to 5)
@@ -121,7 +117,6 @@ export default function FoundationStep({ initialProfile }: FoundationStepProps) 
         </div>
       </div>
 
-      {/* Personality sliders */}
       <div className="space-y-6">
         <div>
           <label className="block text-sm font-medium text-slate-300 mb-1">
@@ -178,15 +173,14 @@ export default function FoundationStep({ initialProfile }: FoundationStepProps) 
         </div>
       </div>
 
-      {/* CTA */}
-      <Button
-        size="lg"
-        className="w-full"
-        disabled={!isValid || isPending}
-        onClick={handleContinue}
-      >
-        {isPending ? "Saving…" : "Continue"}
-      </Button>
+      {error && <p className="text-red-400 text-sm">{error}</p>}
+
+      <StepNavigation
+        backUrl={getPreviousStepUrl("foundation")}
+        isPending={isPending}
+        isValid={isValid}
+        onContinue={handleContinue}
+      />
     </div>
   );
 }

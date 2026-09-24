@@ -24,7 +24,8 @@ export type LlmTaskType =
   | "CONTENT_STRATEGY"
   | "POST_GENERATION"
   | "POST_REVISION"
-  | "CAMPAIGN_PLAN";
+  | "CAMPAIGN_PLAN"
+  | "WEBSITE_ANALYSIS";
 
 export type QualityTier = "draft" | "standard" | "premium";
 
