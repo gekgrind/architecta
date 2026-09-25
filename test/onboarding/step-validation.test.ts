@@ -37,6 +37,31 @@ describe("getPreviousStepUrl", () => {
   it("returns null for unknown step", () => {
     expect(getPreviousStepUrl("nonexistent")).toBeNull();
   });
+
+  it("all back URLs stay under /onboarding/ (never preview)", () => {
+    for (const step of ONBOARDING_STEPS) {
+      const url = getPreviousStepUrl(step.id);
+      if (url !== null) {
+        expect(url).toMatch(/^\/onboarding\/[a-z]+$/);
+        expect(url).not.toContain("preview");
+      }
+    }
+  });
+
+  it("preview back URLs should resolve to /onboarding/preview?step=", () => {
+    const toPreviewUrl = (backUrl: string) => {
+      const stepId = backUrl.replace("/onboarding/", "");
+      return `/onboarding/preview?step=${stepId}`;
+    };
+
+    const backUrl = getPreviousStepUrl("website");
+    expect(backUrl).toBe("/onboarding/source");
+    expect(toPreviewUrl(backUrl!)).toBe("/onboarding/preview?step=source");
+
+    const foundationBack = getPreviousStepUrl("foundation");
+    expect(foundationBack).toBe("/onboarding/customers");
+    expect(toPreviewUrl(foundationBack!)).toBe("/onboarding/preview?step=customers");
+  });
 });
 
 describe("step validation rules", () => {

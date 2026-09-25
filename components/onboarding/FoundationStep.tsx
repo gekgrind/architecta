@@ -94,11 +94,11 @@ export default function FoundationStep({ answers }: FoundationStepProps) {
       </div>
 
       <div className="space-y-4">
-        <label className="block text-sm font-medium text-slate-300">
+        <label id="values-label" className="block text-sm font-medium text-slate-300">
           Core values (choose up to 5) <span className="text-cyan-500" aria-hidden="true">*</span>
         </label>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2" role="group" aria-labelledby="values-label">
           {VALUE_OPTIONS.map((value) => {
             const active = values.includes(value);
 
@@ -106,6 +106,7 @@ export default function FoundationStep({ answers }: FoundationStepProps) {
               <button
                 key={value}
                 type="button"
+                aria-pressed={active}
                 onClick={() => toggleValue(value)}
                 className={`rounded-lg border px-4 py-2 text-left transition
                   ${

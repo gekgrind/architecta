@@ -1,7 +1,12 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
+
+function toPreviewUrl(backUrl: string): string {
+  const stepId = backUrl.replace("/onboarding/", "");
+  return `/onboarding/preview?step=${stepId}`;
+}
 
 type StepNavigationProps = {
   backUrl: string | null;
@@ -23,18 +28,21 @@ export default function StepNavigation({
   disabledHint,
 }: StepNavigationProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const isPreview = pathname === "/onboarding/preview";
+  const resolvedBackUrl = isPreview && backUrl ? toPreviewUrl(backUrl) : backUrl;
   const showHint = !isValid && !isPending && !!disabledHint;
 
   return (
     <div className="sticky bottom-0 z-10 -mx-4 px-4 pb-[env(safe-area-inset-bottom,0px)] pt-3 md:static md:mx-0 md:px-0 md:pb-0 md:pt-0 bg-[#0a1628]/95 backdrop-blur-sm md:bg-transparent md:backdrop-blur-none space-y-2">
       <div className="flex gap-3">
-        {backUrl && (
+        {resolvedBackUrl && (
           <Button
             variant="outline"
             size="lg"
             className="flex-shrink-0"
             disabled={isPending}
-            onClick={() => router.push(backUrl)}
+            onClick={() => router.push(resolvedBackUrl)}
           >
             Back
           </Button>

@@ -75,7 +75,7 @@ export async function saveStepAnswers(
 
     return { ok: true, next: `/onboarding/${nextStep}` };
   } catch (err) {
-    console.error("[saveStepAnswers] unexpected failure:", err instanceof Error ? err.message : err);
+    console.error("[saveStepAnswers] unexpected failure:", err);
     return { ok: false, error: SAVE_FAILED_MESSAGE };
   }
 }
@@ -96,7 +96,7 @@ export async function updateArchitectaOnboarding(data: Record<string, unknown>) 
 
     return result;
   } catch (err) {
-    console.error("[updateArchitectaOnboarding] unexpected failure:", err instanceof Error ? err.message : err);
+    console.error("[updateArchitectaOnboarding] unexpected failure:", err);
     return { ok: false as const, error: SAVE_FAILED_MESSAGE };
   }
 }
@@ -133,7 +133,7 @@ export async function advanceArchitectaOnboardingStepClient(
 
     return { ok: true as const, next: `/onboarding/${nextStep}`, nextStep };
   } catch (err) {
-    console.error("[advanceStep] unexpected failure:", err instanceof Error ? err.message : err);
+    console.error("[advanceStep] unexpected failure:", err);
     return { ok: false as const, error: SAVE_FAILED_MESSAGE };
   }
 }
@@ -247,7 +247,7 @@ export async function runWebsiteAnalysis(url: string) {
   } catch (err) {
     console.error(
       "[website-analysis] unexpected failure:",
-      err instanceof Error ? err.name : "unknown"
+      err
     );
     return { ok: false as const, error: WEBSITE_ANALYSIS_FAILED_MESSAGE };
   }
@@ -265,12 +265,13 @@ export async function completeOnboarding() {
     const result = await completeArchitectaOnboardingWithData(session.answers);
 
     if (!result.ok) {
+      console.error("[completeOnboarding] completion failed:", result.error);
       return { ok: false as const, error: SAVE_FAILED_MESSAGE };
     }
 
     return { ok: true as const, next: "/dashboard" };
   } catch (err) {
-    console.error("[completeOnboarding] unexpected failure:", err instanceof Error ? err.message : err);
+    console.error("[completeOnboarding] unexpected failure:", err);
     return { ok: false as const, error: SAVE_FAILED_MESSAGE };
   }
 }

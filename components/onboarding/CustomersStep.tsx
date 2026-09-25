@@ -105,11 +105,11 @@ export default function CustomersStep({ answers }: CustomersStepProps) {
         </div>
 
         <div className="space-y-3">
-          <label className="block text-sm font-medium text-slate-300">
+          <label id="pains-label" className="block text-sm font-medium text-slate-300">
             What are they struggling with? <span className="text-cyan-500" aria-hidden="true">*</span>
           </label>
 
-          <div className="grid gap-2">
+          <div className="grid gap-2" role="group" aria-labelledby="pains-label">
             {PAIN_OPTIONS.map((pain) => {
               const active = pains.includes(pain);
 
@@ -117,6 +117,7 @@ export default function CustomersStep({ answers }: CustomersStepProps) {
                 <button
                   key={pain}
                   type="button"
+                  aria-pressed={active}
                   onClick={() => togglePain(pain)}
                   className={`rounded-lg border px-4 py-2 text-left transition
                     ${

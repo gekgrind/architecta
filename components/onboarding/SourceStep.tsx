@@ -73,7 +73,7 @@ export default function SourceStep() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-3">
+      <div className="space-y-3" role="radiogroup" aria-label="Where are you starting from?" aria-required="true">
         {OPTIONS.map((option) => {
           const isActive = selected === option.id;
 
@@ -81,6 +81,8 @@ export default function SourceStep() {
             <button
               key={option.id}
               type="button"
+              role="radio"
+              aria-checked={isActive}
               onClick={() => setSelected(option.id)}
               className={`w-full rounded-xl border p-4 text-left transition
                 ${

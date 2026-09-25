@@ -79,11 +79,11 @@ export default function VisualsStep({ answers }: VisualsStepProps) {
       </div>
 
       <div className="space-y-4">
-        <label className="block text-sm font-medium text-slate-300">
+        <label id="style-label" className="block text-sm font-medium text-slate-300">
           Overall visual style <span className="text-cyan-500" aria-hidden="true">*</span>
         </label>
 
-        <div className="grid gap-2">
+        <div className="grid gap-2" role="radiogroup" aria-labelledby="style-label" aria-required="true">
           {STYLE_OPTIONS.map((option) => {
             const active = style === option.id;
 
@@ -91,6 +91,8 @@ export default function VisualsStep({ answers }: VisualsStepProps) {
               <button
                 key={option.id}
                 type="button"
+                role="radio"
+                aria-checked={active}
                 onClick={() => setStyle(option.id)}
                 className={`rounded-lg border px-4 py-3 text-left transition
                   ${

@@ -198,4 +198,38 @@ describe("completeOnboarding", () => {
 
     expect(result.ok).toBe(true);
   });
+
+  it("logs the original error when completeArchitectaOnboardingWithData returns {ok: false}", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockLoadSession.mockResolvedValueOnce({ id: "s1", answers: {} });
+    mockCompleteWithData.mockResolvedValueOnce({
+      ok: false,
+      error: "brand_profiles insert failed: duplicate key",
+    });
+
+    const result = await completeOnboarding();
+
+    expect(result.ok).toBe(false);
+    expect(spy).toHaveBeenCalledWith(
+      "[completeOnboarding] completion failed:",
+      "brand_profiles insert failed: duplicate key"
+    );
+    spy.mockRestore();
+  });
+
+  it("logs the full error object when an exception is thrown", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const thrownError = new Error("DB crash");
+    mockLoadSession.mockResolvedValueOnce({ id: "s1", answers: {} });
+    mockCompleteWithData.mockRejectedValueOnce(thrownError);
+
+    const result = await completeOnboarding();
+
+    expect(result.ok).toBe(false);
+    expect(spy).toHaveBeenCalledWith(
+      "[completeOnboarding] unexpected failure:",
+      thrownError
+    );
+    spy.mockRestore();
+  });
 });
