@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveStepAnswers } from "@/lib/onboarding/actions";
 import StepNavigation from "@/components/onboarding/StepNavigation";
+import ChoiceCard from "@/components/onboarding/ChoiceCard";
 import { getPreviousStepUrl } from "@/lib/onboarding/steps";
 import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
 
@@ -79,101 +80,94 @@ export default function FoundationStep({ answers }: FoundationStepProps) {
   }
 
   return (
-    <div className="space-y-10">
-      <div className="space-y-3 text-center">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Brand foundation
-        </h1>
-        <p className="text-slate-400 text-lg">
-          These guide every message Architecta creates.
-        </p>
-      </div>
-
+    <div className="space-y-8">
       <div className="space-y-4">
-        <label className="block text-sm font-medium text-slate-300">
+        <p id="onb-core-values" className="bp-label">
           Core values (choose up to 5)
-        </label>
+        </p>
 
-        <div className="grid grid-cols-2 gap-2">
-          {VALUE_OPTIONS.map((value) => {
-            const active = values.includes(value);
-
-            return (
-              <button
-                key={value}
-                type="button"
-                onClick={() => toggleValue(value)}
-                className={`rounded-lg border px-4 py-2 text-left transition
-                  ${
-                    active
-                      ? "border-indigo-500 bg-indigo-500/10"
-                      : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
-                  }`}
-              >
-                <span className="text-sm text-white">{value}</span>
-              </button>
-            );
-          })}
+        <div
+          className="grid grid-cols-2 gap-2"
+          role="group"
+          aria-labelledby="onb-core-values"
+        >
+          {VALUE_OPTIONS.map((value) => (
+            <ChoiceCard
+              key={value}
+              mode="multi"
+              compact
+              title={value}
+              selected={values.includes(value)}
+              onSelect={() => toggleValue(value)}
+            />
+          ))}
         </div>
       </div>
 
       <div className="space-y-6">
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-1">
+          <label htmlFor="onb-boldness" className="bp-label mb-1">
             Boldness
           </label>
           <input
+            id="onb-boldness"
             type="range"
             min={0}
             max={100}
             value={boldness}
             onChange={(e) => setBoldness(Number(e.target.value))}
-            className="w-full"
+            className="bp-range"
           />
-          <div className="flex justify-between text-xs text-slate-500">
+          <div className="bp-hint flex justify-between">
             <span>Reserved</span>
             <span>Bold</span>
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-1">
+          <label htmlFor="onb-tone" className="bp-label mb-1">
             Tone
           </label>
           <input
+            id="onb-tone"
             type="range"
             min={0}
             max={100}
             value={tone}
             onChange={(e) => setTone(Number(e.target.value))}
-            className="w-full"
+            className="bp-range"
           />
-          <div className="flex justify-between text-xs text-slate-500">
+          <div className="bp-hint flex justify-between">
             <span>Friendly</span>
             <span>Direct</span>
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-1">
+          <label htmlFor="onb-authority" className="bp-label mb-1">
             Authority
           </label>
           <input
+            id="onb-authority"
             type="range"
             min={0}
             max={100}
             value={authority}
             onChange={(e) => setAuthority(Number(e.target.value))}
-            className="w-full"
+            className="bp-range"
           />
-          <div className="flex justify-between text-xs text-slate-500">
+          <div className="bp-hint flex justify-between">
             <span>Approachable</span>
             <span>Authoritative</span>
           </div>
         </div>
       </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && (
+        <p className="bp-error" role="alert">
+          {error}
+        </p>
+      )}
 
       <StepNavigation
         backUrl={getPreviousStepUrl("foundation")}

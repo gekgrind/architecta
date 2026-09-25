@@ -24,10 +24,10 @@ function ReviewItem({
 
   return (
     <div className="space-y-1">
-      <div className="text-xs uppercase tracking-wide text-slate-500">
+      <div className="bp-hint text-xs uppercase tracking-wide">
         {label}
       </div>
-      <div className="text-sm text-white">
+      <div className="text-sm text-[#eef4fa] break-words">
         {Array.isArray(value) ? value.join(", ") : value}
       </div>
     </div>
@@ -43,9 +43,9 @@ function ReviewSection({
 }) {
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-medium text-indigo-400 uppercase tracking-wide">
+      <h2 className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-[#00d4ff]">
         {title}
-      </h3>
+      </h2>
       <div className="space-y-4">{children}</div>
     </div>
   );
@@ -76,19 +76,10 @@ export default function ReviewStep({
   );
 
   return (
-    <div className="space-y-10">
-      <div className="space-y-3 text-center">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Review your setup
-        </h1>
-        <p className="text-slate-400 text-lg">
-          Architecta will generate your content system from this.
-        </p>
-      </div>
-
+    <div className="space-y-8">
       {hasExistingContext && (
-        <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4">
-          <p className="text-sm text-indigo-300">
+        <div className="bp-notice">
+          <p>
             Some of this was pre-filled from your Entrepreneuria profile
             {answers.website_analysis ? " and website analysis" : ""}.
             You can go back to any step to make changes.
@@ -97,14 +88,14 @@ export default function ReviewStep({
       )}
 
       {!hasData && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-          <p className="text-sm text-amber-300">
+        <div className="bp-notice bp-notice-warn">
+          <p>
             It looks like some information might be missing. You can go back to fill in more details, or continue to generate with what you have.
           </p>
         </div>
       )}
 
-      <div className="space-y-8 rounded-xl border border-slate-800 bg-slate-900/60 p-6">
+      <div className="bp-panel space-y-8 p-5 sm:p-6">
         <ReviewSection title="Business">
           <ReviewItem label="Brand name" value={answers.brand_name} />
           <ReviewItem label="Industry" value={answers.industry} />
@@ -154,7 +145,7 @@ export default function ReviewStep({
         pendingLabel="Preparing…"
       />
 
-      <p className="text-center text-sm text-slate-500">
+      <p className="bp-hint text-center">
         You can edit any of this later inside Architecta.
       </p>
     </div>

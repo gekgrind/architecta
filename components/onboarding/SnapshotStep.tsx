@@ -65,19 +65,10 @@ export default function SnapshotStep({
   }
 
   return (
-    <div className="space-y-10">
-      <div className="space-y-3 text-center">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Brand snapshot
-        </h1>
-        <p className="text-slate-400 text-lg">
-          This is the foundation Architecta builds everything on.
-        </p>
-      </div>
-
+    <div className="space-y-8">
       {prefilled && (
-        <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4">
-          <p className="text-sm text-indigo-300">
+        <div className="bp-notice">
+          <p>
             {wa
               ? "Pre-filled from your website analysis. Review and adjust anything that doesn't look right."
               : "Pre-filled from your Entrepreneuria profile. Review and adjust as needed."}
@@ -87,41 +78,44 @@ export default function SnapshotStep({
 
       <div className="space-y-6">
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-300">
+          <label htmlFor="onb-brand-name" className="bp-label">
             Brand or business name
           </label>
           <input
+            id="onb-brand-name"
             type="text"
             value={brandName}
             onChange={(e) => setBrandName(e.target.value)}
             placeholder="Acme Studio"
-            className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+            className="bp-field"
           />
         </div>
 
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-300">
+          <label htmlFor="onb-industry" className="bp-label">
             Industry
           </label>
           <input
+            id="onb-industry"
             type="text"
             value={industry}
             onChange={(e) => setIndustry(e.target.value)}
             placeholder="SaaS, wellness, ecommerce, creator, etc."
-            className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+            className="bp-field"
           />
         </div>
 
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-300">
+          <label htmlFor="onb-description" className="bp-label">
             What do you do?
           </label>
           <textarea
+            id="onb-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={4}
             placeholder="Explain it like you would to a smart friend."
-            className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none resize-none"
+            className="bp-field"
           />
         </div>
       </div>
@@ -135,7 +129,11 @@ export default function SnapshotStep({
         onApply={(text) => setDescription(text)}
       />
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && (
+        <p className="bp-error" role="alert">
+          {error}
+        </p>
+      )}
 
       <StepNavigation
         backUrl={getPreviousStepUrl("snapshot")}

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveStepAnswers } from "@/lib/onboarding/actions";
 import StepNavigation from "@/components/onboarding/StepNavigation";
+import ChoiceCard from "@/components/onboarding/ChoiceCard";
 import { getPreviousStepUrl } from "@/lib/onboarding/steps";
 import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
 
@@ -75,73 +76,65 @@ export default function CustomersStep({ answers }: CustomersStepProps) {
   }
 
   return (
-    <div className="space-y-10">
-      <div className="space-y-3 text-center">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Who are you creating for?
-        </h1>
-        <p className="text-slate-400 text-lg">
-          Clear customer insight makes content convert.
-        </p>
-      </div>
-
+    <div className="space-y-8">
       <div className="space-y-6">
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-300">
+          <label htmlFor="onb-customer-role" className="bp-label">
             Your ideal customer
           </label>
           <input
+            id="onb-customer-role"
             type="text"
             value={role}
             onChange={(e) => setRole(e.target.value)}
             placeholder="Solo founders, busy professionals, local business owners…"
-            className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+            className="bp-field"
           />
         </div>
 
         <div className="space-y-3">
-          <label className="block text-sm font-medium text-slate-300">
+          <p id="onb-customer-pains" className="bp-label">
             What are they struggling with?
-          </label>
+          </p>
 
-          <div className="grid gap-2">
-            {PAIN_OPTIONS.map((pain) => {
-              const active = pains.includes(pain);
-
-              return (
-                <button
-                  key={pain}
-                  type="button"
-                  onClick={() => togglePain(pain)}
-                  className={`rounded-lg border px-4 py-2 text-left transition
-                    ${
-                      active
-                        ? "border-indigo-500 bg-indigo-500/10"
-                        : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
-                    }`}
-                >
-                  <span className="text-sm text-white">{pain}</span>
-                </button>
-              );
-            })}
+          <div
+            className="grid gap-2"
+            role="group"
+            aria-labelledby="onb-customer-pains"
+          >
+            {PAIN_OPTIONS.map((pain) => (
+              <ChoiceCard
+                key={pain}
+                mode="multi"
+                compact
+                title={pain}
+                selected={pains.includes(pain)}
+                onSelect={() => togglePain(pain)}
+              />
+            ))}
           </div>
         </div>
 
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-300">
+          <label htmlFor="onb-customer-outcome" className="bp-label">
             What outcome do they want?
           </label>
           <textarea
+            id="onb-customer-outcome"
             rows={3}
             value={outcome}
             onChange={(e) => setOutcome(e.target.value)}
             placeholder="What does success look like for them?"
-            className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none resize-none"
+            className="bp-field"
           />
         </div>
       </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && (
+        <p className="bp-error" role="alert">
+          {error}
+        </p>
+      )}
 
       <StepNavigation
         backUrl={getPreviousStepUrl("customers")}

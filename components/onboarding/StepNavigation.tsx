@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 
 type StepNavigationProps = {
   backUrl: string | null;
@@ -23,26 +23,28 @@ export default function StepNavigation({
   const router = useRouter();
 
   return (
-    <div className="flex gap-3">
+    <div className="bp-nav">
       {backUrl && (
-        <Button
-          variant="outline"
-          size="lg"
-          className="flex-shrink-0"
+        <button
+          type="button"
+          className="bp-btn bp-btn-secondary"
           disabled={isPending}
           onClick={() => router.push(backUrl)}
         >
+          <ArrowLeft size={16} aria-hidden />
           Back
-        </Button>
+        </button>
       )}
-      <Button
-        size="lg"
-        className="w-full"
+      <button
+        type="button"
+        className="bp-btn bp-btn-primary"
         disabled={!isValid || isPending}
+        aria-busy={isPending || undefined}
         onClick={onContinue}
       >
         {isPending ? pendingLabel : continueLabel}
-      </Button>
+        {!isPending && <ArrowRight size={16} aria-hidden />}
+      </button>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveStepAnswers } from "@/lib/onboarding/actions";
 import StepNavigation from "@/components/onboarding/StepNavigation";
+import ChoiceCard from "@/components/onboarding/ChoiceCard";
 import { getPreviousStepUrl } from "@/lib/onboarding/steps";
 import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
 
@@ -79,19 +80,10 @@ export default function VoiceStep({ answers }: VoiceStepProps) {
   }
 
   return (
-    <div className="space-y-10">
-      <div className="space-y-3 text-center">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Voice & messaging
-        </h1>
-        <p className="text-slate-400 text-lg">
-          This defines how Architecta speaks on your behalf.
-        </p>
-      </div>
-
+    <div className="space-y-8">
       {wa?.tone && !answers.voice_tone && (
-        <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4">
-          <p className="text-sm text-indigo-300">
+        <div className="bp-notice">
+          <p>
             Based on your website, your tone appears to be: <strong>{wa.tone}</strong>
             {wa.voice_characteristics ? ` — ${wa.voice_characteristics}` : ""}
           </p>
@@ -99,80 +91,79 @@ export default function VoiceStep({ answers }: VoiceStepProps) {
       )}
 
       <div className="space-y-4">
-        <label className="block text-sm font-medium text-slate-300">
+        <p id="onb-overall-tone" className="bp-label">
           Overall tone
-        </label>
+        </p>
 
-        <div className="grid gap-2">
-          {TONE_OPTIONS.map((option) => {
-            const active = tone === option.id;
-
-            return (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => setTone(option.id)}
-                className={`rounded-lg border px-4 py-3 text-left transition
-                  ${
-                    active
-                      ? "border-indigo-500 bg-indigo-500/10"
-                      : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
-                  }`}
-              >
-                <span className="text-sm text-white">
-                  {option.label}
-                </span>
-              </button>
-            );
-          })}
+        <div
+          className="grid gap-2"
+          role="group"
+          aria-labelledby="onb-overall-tone"
+        >
+          {TONE_OPTIONS.map((option) => (
+            <ChoiceCard
+              key={option.id}
+              compact
+              title={option.label}
+              selected={tone === option.id}
+              onSelect={() => setTone(option.id)}
+            />
+          ))}
         </div>
       </div>
 
       <div className="space-y-4">
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-300">
+          <label htmlFor="onb-words-to-use" className="bp-label">
             Words or phrases to use (optional)
           </label>
           <input
+            id="onb-words-to-use"
             type="text"
             value={wordsToUse}
             onChange={(e) => setWordsToUse(e.target.value)}
             placeholder="clear, simple, actionable…"
-            className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+            className="bp-field"
           />
         </div>
 
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-300">
+          <label htmlFor="onb-words-to-avoid" className="bp-label">
             Words or phrases to avoid (optional)
           </label>
           <input
+            id="onb-words-to-avoid"
             type="text"
             value={wordsToAvoid}
             onChange={(e) => setWordsToAvoid(e.target.value)}
             placeholder="hustle, guru, hack…"
-            className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+            className="bp-field"
           />
         </div>
 
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-300">
+          <label htmlFor="onb-reference-brands" className="bp-label">
             Brands you admire (optional)
           </label>
           <input
+            id="onb-reference-brands"
             type="text"
             value={references}
             onChange={(e) => setReferences(e.target.value)}
             placeholder="Apple, Notion, Patagonia…"
-            className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+            className="bp-field"
           />
-          <p className="text-sm text-slate-500">
+          <p className="bp-hint">
             Used for tone reference, not imitation.
           </p>
         </div>
       </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && (
+        <p className="bp-error" role="alert">
+          {error}
+        </p>
+      )}
 
       <StepNavigation
         backUrl={getPreviousStepUrl("voice")}

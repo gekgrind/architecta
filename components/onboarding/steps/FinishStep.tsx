@@ -23,10 +23,10 @@ export default function FinishStep() {
   if (error) {
     return (
       <div className="space-y-4 text-center">
-        <p className="text-red-400">{error}</p>
+        <p className="bp-error" role="alert">{error}</p>
         <button
           type="button"
-          className="text-indigo-400 underline text-sm"
+          className="bp-link underline"
           onClick={() => router.push("/onboarding/review")}
         >
           Go back to review
@@ -37,7 +37,7 @@ export default function FinishStep() {
 
   return (
     <div className="text-center space-y-3">
-      <p className="text-slate-400">
+      <p className="text-[#aebdcf]" role="status">
         {isPending ? "Building your brand system…" : "Architecta is ready to build your complete brand system."}
       </p>
     </div>

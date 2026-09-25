@@ -40,7 +40,7 @@ export default function AISuggestions({
       <button
         type="button"
         onClick={handleGenerate}
-        className="text-sm text-indigo-400 hover:text-indigo-300 transition"
+        className="bp-link"
       >
         Need help? Get AI suggestions →
       </button>
@@ -48,21 +48,21 @@ export default function AISuggestions({
   }
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4 space-y-3">
-      <div className="text-xs uppercase tracking-wide text-slate-500">
+    <div className="bp-panel p-4 space-y-3">
+      <div className="bp-hint text-xs uppercase tracking-wide">
         AI suggestions
       </div>
 
       {isPending && (
-        <div className="text-sm text-slate-400">Thinking…</div>
+        <div className="text-sm text-[#aebdcf]" role="status">Thinking…</div>
       )}
 
       {error && (
-        <div className="text-sm text-red-400">{error}</div>
+        <div className="bp-error" role="alert">{error}</div>
       )}
 
       {content && (
-        <div className="text-sm text-slate-300 whitespace-pre-line">
+        <div className="text-sm text-[#d3e0ec] whitespace-pre-line">
           {content}
         </div>
       )}
@@ -71,7 +71,7 @@ export default function AISuggestions({
         <button
           type="button"
           onClick={() => onApply(content)}
-          className="text-sm text-indigo-400 hover:text-indigo-300"
+          className="bp-link"
         >
           Use this
         </button>

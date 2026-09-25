@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import StepRenderer, { type OnboardingContext } from "./steps/StepRenderer";
+import StepNavigation from "./StepNavigation";
 import type { OnboardingStep } from "@/lib/onboarding/types";
 
 type Props = {
@@ -16,8 +17,6 @@ type Props = {
 export default function BlueprintCard({
   step,
   context,
-  isFirst,
-  onBack,
   onForwardStart,
 }: Props) {
   const [active, setActive] = useState(false);
@@ -39,12 +38,6 @@ export default function BlueprintCard({
         <div className="construction-line vertical construction-line-5" />
       </div>
 
-      <div className="dimension-marker dimension-top">REF {step.number}</div>
-      <div className="dimension-marker dimension-right">SCALE 1:1</div>
-
-      <div className="tech-annotation annotation-1">PRIMARY INPUT</div>
-      <div className="tech-annotation annotation-2">USER RESPONSE</div>
-
       <div className="crosshair crosshair-tl" />
       <div className="crosshair crosshair-br" />
 
@@ -56,35 +49,29 @@ export default function BlueprintCard({
       <div className="blueprint-light light-1" />
       <div className="blueprint-light light-2" />
 
-      <div className="card-stamp">
-        REV. {step.number}
-        <br />
-        ARCHITECTA
-      </div>
-
       <div className="card-content">
-        <div className="card-number">STEP {step.number}</div>
+        <header className="card-meta">
+          <div className="card-meta-step">
+            <span className="card-meta-index">STEP {step.number}</span>
+            <span className="card-meta-name">{step.title}</span>
+          </div>
+          <span className="card-meta-mark">ARCHITECTA</span>
+        </header>
 
-        <h2 className="question">{step.title}</h2>
-        {step.subtitle && <p className="subhead">{step.subtitle}</p>}
+        <div className="question-block">
+          <h1 className="question">{step.prompt}</h1>
+          {step.subtitle && <p className="subhead">{step.subtitle}</p>}
+        </div>
 
         <StepRenderer step={step} context={context} />
 
         {isWelcome && (
-          <div className="button-group">
-            {!isFirst && onBack && (
-              <button type="button" className="btn" onClick={onBack}>
-                Back
-              </button>
-            )}
-
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => onForwardStart?.()}
-            >
-              Continue
-            </button>
+          <div className="mt-8">
+            <StepNavigation
+              backUrl={null}
+              isPending={false}
+              onContinue={() => onForwardStart?.()}
+            />
           </div>
         )}
       </div>

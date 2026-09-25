@@ -58,61 +58,59 @@ export default function MarketStep({ answers }: MarketStepProps) {
   }
 
   return (
-    <div className="space-y-10">
-      <div className="space-y-3 text-center">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Market & positioning
-        </h1>
-        <p className="text-slate-400 text-lg">
-          This helps Architecta avoid generic content.
-        </p>
-      </div>
-
+    <div className="space-y-8">
       <div className="space-y-6">
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-300">
+          <label htmlFor="onb-primary-market" className="bp-label">
             Primary market
           </label>
           <input
+            id="onb-primary-market"
             type="text"
             value={primaryMarket}
             onChange={(e) => setPrimaryMarket(e.target.value)}
             placeholder="B2B SaaS, wellness, ecommerce, creators, etc."
-            className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+            className="bp-field"
           />
         </div>
 
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-300">
+          <label htmlFor="onb-niche" className="bp-label">
             Niche or focus area
           </label>
           <input
+            id="onb-niche"
             type="text"
             value={niche}
             onChange={(e) => setNiche(e.target.value)}
             placeholder="Early-stage founders, solo consultants, local services…"
-            className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+            className="bp-field"
           />
         </div>
 
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-300">
+          <label htmlFor="onb-competitors" className="bp-label">
             Competitors (optional)
           </label>
           <input
+            id="onb-competitors"
             type="text"
             value={competitors}
             onChange={(e) => setCompetitors(e.target.value)}
             placeholder="Competitor A, Competitor B, Competitor C"
-            className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+            className="bp-field"
           />
-          <p className="text-sm text-slate-500">
+          <p className="bp-hint">
             Comma-separated. This helps Architecta sharpen differentiation.
           </p>
         </div>
       </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && (
+        <p className="bp-error" role="alert">
+          {error}
+        </p>
+      )}
 
       <StepNavigation
         backUrl={getPreviousStepUrl("market")}
