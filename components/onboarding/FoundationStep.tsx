@@ -57,24 +57,28 @@ export default function FoundationStep({ answers }: FoundationStepProps) {
 
     startTransition(async () => {
       setError(null);
-      const result = await saveStepAnswers(
-        {
-          brand_values: values,
-          brand_personality: {
-            boldness,
-            tone,
-            authority,
+      try {
+        const result = await saveStepAnswers(
+          {
+            brand_values: values,
+            brand_personality: {
+              boldness,
+              tone,
+              authority,
+            },
           },
-        },
-        "foundation"
-      );
+          "foundation"
+        );
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+
+        router.push(result.next);
+      } catch {
+        setError("Something went wrong saving your answers. Please try again.");
       }
-
-      router.push(result.next);
     });
   }
 
@@ -90,11 +94,11 @@ export default function FoundationStep({ answers }: FoundationStepProps) {
       </div>
 
       <div className="space-y-4">
-        <label className="block text-sm font-medium text-slate-300">
-          Core values (choose up to 5)
+        <label id="values-label" className="block text-sm font-medium text-slate-300">
+          Core values (choose up to 5) <span className="text-cyan-500" aria-hidden="true">*</span>
         </label>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2" role="group" aria-labelledby="values-label">
           {VALUE_OPTIONS.map((value) => {
             const active = values.includes(value);
 
@@ -102,6 +106,7 @@ export default function FoundationStep({ answers }: FoundationStepProps) {
               <button
                 key={value}
                 type="button"
+                aria-pressed={active}
                 onClick={() => toggleValue(value)}
                 className={`rounded-lg border px-4 py-2 text-left transition
                   ${
@@ -173,13 +178,14 @@ export default function FoundationStep({ answers }: FoundationStepProps) {
         </div>
       </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && <p className="text-red-400 text-sm" role="alert">{error}</p>}
 
       <StepNavigation
         backUrl={getPreviousStepUrl("foundation")}
         isPending={isPending}
         isValid={isValid}
         onContinue={handleContinue}
+        disabledHint="Select at least one core value to continue"
       />
     </div>
   );

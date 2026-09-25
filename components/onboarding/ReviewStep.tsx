@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveStepAnswers } from "@/lib/onboarding/actions";
 import StepNavigation from "@/components/onboarding/StepNavigation";
@@ -57,14 +57,23 @@ export default function ReviewStep({
 }: ReviewStepProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   function handleGenerate() {
     startTransition(async () => {
-      const result = await saveStepAnswers({}, "review");
+      setError(null);
+      try {
+        const result = await saveStepAnswers({}, "review");
 
-      if (!result.ok) return;
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
 
-      router.push(result.next);
+        router.push(result.next);
+      } catch {
+        setError("Something went wrong. Please try again.");
+      }
     });
   }
 
@@ -144,6 +153,8 @@ export default function ReviewStep({
           />
         </ReviewSection>
       </div>
+
+      {error && <p className="text-red-400 text-sm" role="alert">{error}</p>}
 
       <StepNavigation
         backUrl={getPreviousStepUrl("review")}

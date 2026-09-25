@@ -42,24 +42,28 @@ export default function VisualsStep({ answers }: VisualsStepProps) {
 
     startTransition(async () => {
       setError(null);
-      const result = await saveStepAnswers(
-        {
-          visual_style: style,
-          primary_colors: colors
-            .split(",")
-            .map((c) => c.trim())
-            .filter(Boolean),
-          has_logo: hasLogo,
-        },
-        "visuals"
-      );
+      try {
+        const result = await saveStepAnswers(
+          {
+            visual_style: style,
+            primary_colors: colors
+              .split(",")
+              .map((c) => c.trim())
+              .filter(Boolean),
+            has_logo: hasLogo,
+          },
+          "visuals"
+        );
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+
+        router.push(result.next);
+      } catch {
+        setError("Something went wrong saving your answers. Please try again.");
       }
-
-      router.push(result.next);
     });
   }
 
@@ -75,11 +79,11 @@ export default function VisualsStep({ answers }: VisualsStepProps) {
       </div>
 
       <div className="space-y-4">
-        <label className="block text-sm font-medium text-slate-300">
-          Overall visual style
+        <label id="style-label" className="block text-sm font-medium text-slate-300">
+          Overall visual style <span className="text-cyan-500" aria-hidden="true">*</span>
         </label>
 
-        <div className="grid gap-2">
+        <div className="grid gap-2" role="radiogroup" aria-labelledby="style-label" aria-required="true">
           {STYLE_OPTIONS.map((option) => {
             const active = style === option.id;
 
@@ -87,6 +91,8 @@ export default function VisualsStep({ answers }: VisualsStepProps) {
               <button
                 key={option.id}
                 type="button"
+                role="radio"
+                aria-checked={active}
                 onClick={() => setStyle(option.id)}
                 className={`rounded-lg border px-4 py-3 text-left transition
                   ${
@@ -137,13 +143,14 @@ export default function VisualsStep({ answers }: VisualsStepProps) {
         </button>
       </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && <p className="text-red-400 text-sm" role="alert">{error}</p>}
 
       <StepNavigation
         backUrl={getPreviousStepUrl("visuals")}
         isPending={isPending}
         isValid={isValid}
         onContinue={handleContinue}
+        disabledHint="Select a visual style to continue"
       />
     </div>
   );

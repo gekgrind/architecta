@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { saveStepAnswers, runWebsiteAnalysis } from "@/lib/onboarding/actions";
 import { getPreviousStepUrl } from "@/lib/onboarding/steps";
@@ -21,6 +21,8 @@ export default function WebsiteStep({
   existingWebsiteUrl,
 }: WebsiteStepProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const isPreview = pathname === "/onboarding/preview";
   const [isPending, startTransition] = useTransition();
 
   const [hasWebsite, setHasWebsite] = useState<boolean | null>(
@@ -102,8 +104,10 @@ export default function WebsiteStep({
         </div>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-3" role="radiogroup" aria-label="Do you have a website?" aria-required="true">
         <button
+          role="radio"
+          aria-checked={hasWebsite === true}
           className={`w-full rounded-xl border p-4 text-left transition ${
             hasWebsite === true ? "border-indigo-500 bg-indigo-500/10" : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
           }`}
@@ -112,6 +116,8 @@ export default function WebsiteStep({
           <span className="font-medium text-white">I have a website</span>
         </button>
         <button
+          role="radio"
+          aria-checked={hasWebsite === false}
           className={`w-full rounded-xl border p-4 text-left transition ${
             hasWebsite === false ? "border-indigo-500 bg-indigo-500/10" : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
           }`}
@@ -148,7 +154,7 @@ export default function WebsiteStep({
         </div>
       )}
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && <p className="text-red-400 text-sm" role="alert">{error}</p>}
 
       {analysisFailed && hasWebsite === true && (
         <Button
@@ -169,7 +175,10 @@ export default function WebsiteStep({
             size="lg"
             className="flex-shrink-0"
             disabled={isPending || analyzing}
-            onClick={() => router.push(getPreviousStepUrl("website")!)}
+            onClick={() => {
+              const back = getPreviousStepUrl("website")!;
+              router.push(isPreview ? `/onboarding/preview?step=${back.replace("/onboarding/", "")}` : back);
+            }}
           >
             Back
           </Button>

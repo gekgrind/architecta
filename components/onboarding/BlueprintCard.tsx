@@ -11,6 +11,8 @@ type Props = {
   isLast: boolean;
   onBack?: () => void;
   onForwardStart?: () => void;
+  renderStep?: (step: OnboardingStep, context: OnboardingContext) => React.ReactNode;
+  error?: string | null;
 };
 
 export default function BlueprintCard({
@@ -19,6 +21,8 @@ export default function BlueprintCard({
   isFirst,
   onBack,
   onForwardStart,
+  renderStep,
+  error,
 }: Props) {
   const [active, setActive] = useState(false);
 
@@ -31,35 +35,37 @@ export default function BlueprintCard({
 
   return (
     <div className={`blueprint-card ${active ? "active" : ""}`}>
-      <div className="construction-lines">
-        <div className="construction-line horizontal construction-line-1" />
-        <div className="construction-line horizontal construction-line-2" />
-        <div className="construction-line horizontal construction-line-3" />
-        <div className="construction-line vertical construction-line-4" />
-        <div className="construction-line vertical construction-line-5" />
-      </div>
+      <div className="blueprint-decorations">
+        <div className="construction-lines">
+          <div className="construction-line horizontal construction-line-1" />
+          <div className="construction-line horizontal construction-line-2" />
+          <div className="construction-line horizontal construction-line-3" />
+          <div className="construction-line vertical construction-line-4" />
+          <div className="construction-line vertical construction-line-5" />
+        </div>
 
-      <div className="dimension-marker dimension-top">REF {step.number}</div>
-      <div className="dimension-marker dimension-right">SCALE 1:1</div>
+        <div className="dimension-marker dimension-top">REF {step.number}</div>
+        <div className="dimension-marker dimension-right">SCALE 1:1</div>
 
-      <div className="tech-annotation annotation-1">PRIMARY INPUT</div>
-      <div className="tech-annotation annotation-2">USER RESPONSE</div>
+        <div className="tech-annotation annotation-1">PRIMARY INPUT</div>
+        <div className="tech-annotation annotation-2">USER RESPONSE</div>
 
-      <div className="crosshair crosshair-tl" />
-      <div className="crosshair crosshair-br" />
+        <div className="crosshair crosshair-tl" />
+        <div className="crosshair crosshair-br" />
 
-      <div className="blueprint-corner corner-tl" />
-      <div className="blueprint-corner corner-tr" />
-      <div className="blueprint-corner corner-bl" />
-      <div className="blueprint-corner corner-br" />
+        <div className="blueprint-corner corner-tl" />
+        <div className="blueprint-corner corner-tr" />
+        <div className="blueprint-corner corner-bl" />
+        <div className="blueprint-corner corner-br" />
 
-      <div className="blueprint-light light-1" />
-      <div className="blueprint-light light-2" />
+        <div className="blueprint-light light-1" />
+        <div className="blueprint-light light-2" />
 
-      <div className="card-stamp">
-        REV. {step.number}
-        <br />
-        ARCHITECTA
+        <div className="card-stamp">
+          REV. {step.number}
+          <br />
+          ARCHITECTA
+        </div>
       </div>
 
       <div className="card-content">
@@ -68,7 +74,11 @@ export default function BlueprintCard({
         <h2 className="question">{step.title}</h2>
         {step.subtitle && <p className="subhead">{step.subtitle}</p>}
 
-        <StepRenderer step={step} context={context} />
+        {renderStep ? renderStep(step, context) : <StepRenderer step={step} context={context} />}
+
+        {error && (
+          <p className="text-red-400 text-sm mt-4" role="alert">{error}</p>
+        )}
 
         {isWelcome && (
           <div className="button-group">
