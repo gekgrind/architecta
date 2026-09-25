@@ -46,21 +46,25 @@ export default function SnapshotStep({
 
     startTransition(async () => {
       setError(null);
-      const result = await saveStepAnswers(
-        {
-          brand_name: brandName.trim(),
-          industry: industry.trim(),
-          description: description.trim(),
-        },
-        "snapshot"
-      );
+      try {
+        const result = await saveStepAnswers(
+          {
+            brand_name: brandName.trim(),
+            industry: industry.trim(),
+            description: description.trim(),
+          },
+          "snapshot"
+        );
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+
+        router.push(result.next);
+      } catch {
+        setError("Something went wrong saving your answers. Please try again.");
       }
-
-      router.push(result.next);
     });
   }
 
@@ -79,7 +83,7 @@ export default function SnapshotStep({
       <div className="space-y-6">
         <div className="space-y-2">
           <label htmlFor="onb-brand-name" className="bp-label">
-            Brand or business name
+            Brand or business name <span className="text-cyan-500" aria-hidden="true">*</span>
           </label>
           <input
             id="onb-brand-name"
@@ -87,13 +91,14 @@ export default function SnapshotStep({
             value={brandName}
             onChange={(e) => setBrandName(e.target.value)}
             placeholder="Acme Studio"
+            aria-required="true"
             className="bp-field"
           />
         </div>
 
         <div className="space-y-2">
           <label htmlFor="onb-industry" className="bp-label">
-            Industry
+            Industry <span className="text-cyan-500" aria-hidden="true">*</span>
           </label>
           <input
             id="onb-industry"
@@ -101,13 +106,14 @@ export default function SnapshotStep({
             value={industry}
             onChange={(e) => setIndustry(e.target.value)}
             placeholder="SaaS, wellness, ecommerce, creator, etc."
+            aria-required="true"
             className="bp-field"
           />
         </div>
 
         <div className="space-y-2">
           <label htmlFor="onb-description" className="bp-label">
-            What do you do?
+            What do you do? <span className="text-cyan-500" aria-hidden="true">*</span>
           </label>
           <textarea
             id="onb-description"
@@ -115,6 +121,7 @@ export default function SnapshotStep({
             onChange={(e) => setDescription(e.target.value)}
             rows={4}
             placeholder="Explain it like you would to a smart friend."
+            aria-required="true"
             className="bp-field"
           />
         </div>
@@ -140,6 +147,7 @@ export default function SnapshotStep({
         isPending={isPending}
         isValid={isValid}
         onContinue={handleContinue}
+        disabledHint="Fill in all required fields to continue"
       />
     </div>
   );

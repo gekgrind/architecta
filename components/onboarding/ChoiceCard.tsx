@@ -7,7 +7,11 @@ type ChoiceCardProps = {
   description?: string;
   selected: boolean;
   onSelect: () => void;
-  /** "single" renders a radio-style indicator, "multi" a checkbox-style one */
+  /**
+   * "single": radio semantics (place inside a role="radiogroup") with a
+   * radio-style indicator. "multi": toggle-button semantics with a
+   * checkbox-style indicator.
+   */
   mode?: "single" | "multi";
   compact?: boolean;
   disabled?: boolean;
@@ -25,7 +29,9 @@ export default function ChoiceCard({
   return (
     <button
       type="button"
-      aria-pressed={selected}
+      {...(mode === "single"
+        ? { role: "radio", "aria-checked": selected }
+        : { "aria-pressed": selected })}
       data-mode={mode}
       disabled={disabled}
       onClick={onSelect}

@@ -11,12 +11,16 @@ export default function FinishStep() {
 
   useEffect(() => {
     startTransition(async () => {
-      const result = await completeOnboarding();
-      if (!result.ok) {
-        setError(result.error ?? "Something went wrong completing your setup.");
-        return;
+      try {
+        const result = await completeOnboarding();
+        if (!result.ok) {
+          setError(result.error ?? "Something went wrong completing your setup.");
+          return;
+        }
+        router.push(result.next ?? "/dashboard");
+      } catch {
+        setError("Something went wrong completing your setup. Please try again.");
       }
-      router.push(result.next ?? "/dashboard");
     });
   }, [router]);
 
@@ -24,13 +28,36 @@ export default function FinishStep() {
     return (
       <div className="space-y-4 text-center">
         <p className="bp-error" role="alert">{error}</p>
-        <button
-          type="button"
-          className="bp-link underline"
-          onClick={() => router.push("/onboarding/review")}
-        >
-          Go back to review
-        </button>
+        <div className="flex gap-3 justify-center">
+          <button
+            type="button"
+            className="bp-link underline"
+            onClick={() => {
+              setError(null);
+              startTransition(async () => {
+                try {
+                  const result = await completeOnboarding();
+                  if (!result.ok) {
+                    setError(result.error ?? "Something went wrong completing your setup.");
+                    return;
+                  }
+                  router.push(result.next ?? "/dashboard");
+                } catch {
+                  setError("Something went wrong completing your setup. Please try again.");
+                }
+              });
+            }}
+          >
+            Try again
+          </button>
+          <button
+            type="button"
+            className="text-slate-400 underline text-sm"
+            onClick={() => router.push("/onboarding/review")}
+          >
+            Go back to review
+          </button>
+        </div>
       </div>
     );
   }

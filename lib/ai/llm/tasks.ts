@@ -17,6 +17,8 @@ const HAIKU: ModelChoice = {
 const GPT_4O: ModelChoice = { provider: "openai", model: "gpt-4o" };
 const GPT_4O_MINI: ModelChoice = { provider: "openai", model: "gpt-4o-mini" };
 const GPT_41_MINI: ModelChoice = { provider: "openai", model: "gpt-4.1-mini" };
+// NVIDIA-routed tasks are provider-locked: no user pinning, no cross-provider fallback.
+export const NVIDIA_GLM: ModelChoice = { provider: "nvidia", model: "z-ai/glm-5.3" };
 
 export const TASK_ROUTES: Record<TaskType, TaskRoute> = {
   ARTICLE_LONGFORM:      { draft: GPT_41_MINI, standard: SONNET,    premium: OPUS },
@@ -33,7 +35,7 @@ export const TASK_ROUTES: Record<TaskType, TaskRoute> = {
   POST_GENERATION:       { draft: GPT_4O_MINI, standard: SONNET,    premium: OPUS },
   POST_REVISION:         { draft: GPT_4O_MINI, standard: GPT_4O,    premium: SONNET },
   CAMPAIGN_PLAN:         { draft: GPT_41_MINI, standard: SONNET,    premium: OPUS },
-  WEBSITE_ANALYSIS:      { draft: GPT_4O_MINI, standard: GPT_4O,    premium: SONNET },
+  WEBSITE_ANALYSIS:      { draft: NVIDIA_GLM,  standard: NVIDIA_GLM, premium: NVIDIA_GLM },
 };
 
 export function normalizeTier(tier?: QualityTier): QualityTier {

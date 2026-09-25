@@ -12,12 +12,16 @@ type Props = {
   isLast: boolean;
   onBack?: () => void;
   onForwardStart?: () => void;
+  renderStep?: (step: OnboardingStep, context: OnboardingContext) => React.ReactNode;
+  error?: string | null;
 };
 
 export default function BlueprintCard({
   step,
   context,
   onForwardStart,
+  renderStep,
+  error,
 }: Props) {
   const [active, setActive] = useState(false);
 
@@ -30,40 +34,46 @@ export default function BlueprintCard({
 
   return (
     <div className={`blueprint-card ${active ? "active" : ""}`}>
-      <div className="construction-lines">
-        <div className="construction-line horizontal construction-line-1" />
-        <div className="construction-line horizontal construction-line-2" />
-        <div className="construction-line horizontal construction-line-3" />
-        <div className="construction-line vertical construction-line-4" />
-        <div className="construction-line vertical construction-line-5" />
+      <div className="blueprint-decorations">
+        <div className="construction-lines">
+          <div className="construction-line horizontal construction-line-1" />
+          <div className="construction-line horizontal construction-line-2" />
+          <div className="construction-line horizontal construction-line-3" />
+          <div className="construction-line vertical construction-line-4" />
+          <div className="construction-line vertical construction-line-5" />
+        </div>
+
+        <div className="crosshair crosshair-tl" />
+        <div className="crosshair crosshair-br" />
+
+        <div className="blueprint-corner corner-tl" />
+        <div className="blueprint-corner corner-tr" />
+        <div className="blueprint-corner corner-bl" />
+        <div className="blueprint-corner corner-br" />
+
+        <div className="blueprint-light light-1" />
+        <div className="blueprint-light light-2" />
       </div>
-
-      <div className="crosshair crosshair-tl" />
-      <div className="crosshair crosshair-br" />
-
-      <div className="blueprint-corner corner-tl" />
-      <div className="blueprint-corner corner-tr" />
-      <div className="blueprint-corner corner-bl" />
-      <div className="blueprint-corner corner-br" />
-
-      <div className="blueprint-light light-1" />
-      <div className="blueprint-light light-2" />
 
       <div className="card-content">
         <header className="card-meta">
           <div className="card-meta-step">
             <span className="card-meta-index">STEP {step.number}</span>
-            <span className="card-meta-name">{step.title}</span>
+            <span className="card-meta-name">{step.label}</span>
           </div>
           <span className="card-meta-mark">ARCHITECTA</span>
         </header>
 
         <div className="question-block">
-          <h1 className="question">{step.prompt}</h1>
+          <h1 className="question">{step.title}</h1>
           {step.subtitle && <p className="subhead">{step.subtitle}</p>}
         </div>
 
-        <StepRenderer step={step} context={context} />
+        {renderStep ? renderStep(step, context) : <StepRenderer step={step} context={context} />}
+
+        {error && (
+          <p className="bp-error mt-4" role="alert">{error}</p>
+        )}
 
         {isWelcome && (
           <div className="mt-8">

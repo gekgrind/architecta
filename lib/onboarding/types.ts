@@ -28,12 +28,12 @@ export interface OnboardingStep {
   number: string;
 
   /** Short semantic step name (shown in the card metadata, e.g. "Starting point") */
-  title: string;
+  label: string;
 
   /** Primary question / heading the step asks the user */
-  prompt: string;
+  title: string;
 
-  /** Supporting description under the prompt */
+  /** Supporting description under the title */
   subtitle?: string;
 
   /** Used to map to UI components */

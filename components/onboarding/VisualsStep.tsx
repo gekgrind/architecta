@@ -43,24 +43,28 @@ export default function VisualsStep({ answers }: VisualsStepProps) {
 
     startTransition(async () => {
       setError(null);
-      const result = await saveStepAnswers(
-        {
-          visual_style: style,
-          primary_colors: colors
-            .split(",")
-            .map((c) => c.trim())
-            .filter(Boolean),
-          has_logo: hasLogo,
-        },
-        "visuals"
-      );
+      try {
+        const result = await saveStepAnswers(
+          {
+            visual_style: style,
+            primary_colors: colors
+              .split(",")
+              .map((c) => c.trim())
+              .filter(Boolean),
+            has_logo: hasLogo,
+          },
+          "visuals"
+        );
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+
+        router.push(result.next);
+      } catch {
+        setError("Something went wrong saving your answers. Please try again.");
       }
-
-      router.push(result.next);
     });
   }
 
@@ -68,13 +72,14 @@ export default function VisualsStep({ answers }: VisualsStepProps) {
     <div className="space-y-8">
       <div className="space-y-4">
         <p id="onb-overall-visual-style" className="bp-label">
-          Overall visual style
+          Overall visual style <span className="text-cyan-500" aria-hidden="true">*</span>
         </p>
 
         <div
           className="grid gap-2"
-          role="group"
+          role="radiogroup"
           aria-labelledby="onb-overall-visual-style"
+          aria-required="true"
         >
           {STYLE_OPTIONS.map((option) => (
             <ChoiceCard
@@ -127,6 +132,7 @@ export default function VisualsStep({ answers }: VisualsStepProps) {
         isPending={isPending}
         isValid={isValid}
         onContinue={handleContinue}
+        disabledHint="Select a visual style to continue"
       />
     </div>
   );

@@ -51,31 +51,35 @@ export default function VoiceStep({ answers }: VoiceStepProps) {
 
     startTransition(async () => {
       setError(null);
-      const result = await saveStepAnswers(
-        {
-          voice_tone: tone,
-          words_to_use: wordsToUse
-            .split(",")
-            .map((w) => w.trim())
-            .filter(Boolean),
-          words_to_avoid: wordsToAvoid
-            .split(",")
-            .map((w) => w.trim())
-            .filter(Boolean),
-          reference_brands: references
-            .split(",")
-            .map((r) => r.trim())
-            .filter(Boolean),
-        },
-        "voice"
-      );
+      try {
+        const result = await saveStepAnswers(
+          {
+            voice_tone: tone,
+            words_to_use: wordsToUse
+              .split(",")
+              .map((w) => w.trim())
+              .filter(Boolean),
+            words_to_avoid: wordsToAvoid
+              .split(",")
+              .map((w) => w.trim())
+              .filter(Boolean),
+            reference_brands: references
+              .split(",")
+              .map((r) => r.trim())
+              .filter(Boolean),
+          },
+          "voice"
+        );
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+
+        router.push(result.next);
+      } catch {
+        setError("Something went wrong saving your answers. Please try again.");
       }
-
-      router.push(result.next);
     });
   }
 
@@ -92,13 +96,14 @@ export default function VoiceStep({ answers }: VoiceStepProps) {
 
       <div className="space-y-4">
         <p id="onb-overall-tone" className="bp-label">
-          Overall tone
+          Overall tone <span className="text-cyan-500" aria-hidden="true">*</span>
         </p>
 
         <div
           className="grid gap-2"
-          role="group"
+          role="radiogroup"
           aria-labelledby="onb-overall-tone"
+          aria-required="true"
         >
           {TONE_OPTIONS.map((option) => (
             <ChoiceCard
@@ -170,6 +175,7 @@ export default function VoiceStep({ answers }: VoiceStepProps) {
         isPending={isPending}
         isValid={isValid}
         onContinue={handleContinue}
+        disabledHint="Select a tone to continue"
       />
     </div>
   );

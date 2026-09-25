@@ -36,24 +36,28 @@ export default function MarketStep({ answers }: MarketStepProps) {
 
     startTransition(async () => {
       setError(null);
-      const result = await saveStepAnswers(
-        {
-          primary_market: primaryMarket.trim(),
-          niche: niche.trim(),
-          competitors: competitors
-            .split(",")
-            .map((c) => c.trim())
-            .filter(Boolean),
-        },
-        "market"
-      );
+      try {
+        const result = await saveStepAnswers(
+          {
+            primary_market: primaryMarket.trim(),
+            niche: niche.trim(),
+            competitors: competitors
+              .split(",")
+              .map((c) => c.trim())
+              .filter(Boolean),
+          },
+          "market"
+        );
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+
+        router.push(result.next);
+      } catch {
+        setError("Something went wrong saving your answers. Please try again.");
       }
-
-      router.push(result.next);
     });
   }
 
@@ -62,7 +66,7 @@ export default function MarketStep({ answers }: MarketStepProps) {
       <div className="space-y-6">
         <div className="space-y-2">
           <label htmlFor="onb-primary-market" className="bp-label">
-            Primary market
+            Primary market <span className="text-cyan-500" aria-hidden="true">*</span>
           </label>
           <input
             id="onb-primary-market"
@@ -70,13 +74,14 @@ export default function MarketStep({ answers }: MarketStepProps) {
             value={primaryMarket}
             onChange={(e) => setPrimaryMarket(e.target.value)}
             placeholder="B2B SaaS, wellness, ecommerce, creators, etc."
+            aria-required="true"
             className="bp-field"
           />
         </div>
 
         <div className="space-y-2">
           <label htmlFor="onb-niche" className="bp-label">
-            Niche or focus area
+            Niche or focus area <span className="text-cyan-500" aria-hidden="true">*</span>
           </label>
           <input
             id="onb-niche"
@@ -84,6 +89,7 @@ export default function MarketStep({ answers }: MarketStepProps) {
             value={niche}
             onChange={(e) => setNiche(e.target.value)}
             placeholder="Early-stage founders, solo consultants, local services…"
+            aria-required="true"
             className="bp-field"
           />
         </div>
@@ -117,6 +123,7 @@ export default function MarketStep({ answers }: MarketStepProps) {
         isPending={isPending}
         isValid={isValid}
         onContinue={handleContinue}
+        disabledHint="Fill in primary market and niche to continue"
       />
     </div>
   );

@@ -58,24 +58,28 @@ export default function FoundationStep({ answers }: FoundationStepProps) {
 
     startTransition(async () => {
       setError(null);
-      const result = await saveStepAnswers(
-        {
-          brand_values: values,
-          brand_personality: {
-            boldness,
-            tone,
-            authority,
+      try {
+        const result = await saveStepAnswers(
+          {
+            brand_values: values,
+            brand_personality: {
+              boldness,
+              tone,
+              authority,
+            },
           },
-        },
-        "foundation"
-      );
+          "foundation"
+        );
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+
+        router.push(result.next);
+      } catch {
+        setError("Something went wrong saving your answers. Please try again.");
       }
-
-      router.push(result.next);
     });
   }
 
@@ -83,7 +87,7 @@ export default function FoundationStep({ answers }: FoundationStepProps) {
     <div className="space-y-8">
       <div className="space-y-4">
         <p id="onb-core-values" className="bp-label">
-          Core values (choose up to 5)
+          Core values (choose up to 5) <span className="text-cyan-500" aria-hidden="true">*</span>
         </p>
 
         <div
@@ -174,6 +178,7 @@ export default function FoundationStep({ answers }: FoundationStepProps) {
         isPending={isPending}
         isValid={isValid}
         onContinue={handleContinue}
+        disabledHint="Select at least one core value to continue"
       />
     </div>
   );

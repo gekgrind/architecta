@@ -130,12 +130,21 @@
   background-color: var(--bp-navy);
   border: 2px solid var(--bp-line);
   border-radius: 4px;
-  padding: 30px 22px 38px;
+  --bp-card-pad-x: 22px;
+  padding: 30px var(--bp-card-pad-x) 38px;
   position: relative;
   overflow: hidden;
   opacity: 0;
   transform: translateY(30px);
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* Mobile: let the sticky step navigation escape the card's clip.
+   Decorations are clipped separately by .blueprint-decorations. */
+@media (max-width: 767px) {
+  .blueprint-card {
+    overflow: visible;
+  }
 }
 
 .blueprint-card.active {
@@ -144,8 +153,22 @@
 
 @media (min-width: 640px) {
   .blueprint-card {
-    padding: 40px 48px 44px;
+    --bp-card-pad-x: 48px;
+    padding: 40px var(--bp-card-pad-x) 44px;
   }
+}
+
+/* =========================================================
+   DECORATIONS CONTAINER — clips overflow from lights/lines
+   so the card itself can allow vertical overflow on mobile
+========================================================= */
+
+.blueprint-decorations {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
 }
 
 /* =========================================================
@@ -612,7 +635,8 @@ textarea.bp-field {
     0 0 0 1px rgba(0, 212, 255, 0.12);
 }
 
-.bp-choice[aria-pressed="true"] {
+.bp-choice[aria-pressed="true"],
+.bp-choice[aria-checked="true"] {
   background:
     linear-gradient(
       180deg,
@@ -627,12 +651,14 @@ textarea.bp-field {
     0 0 22px -6px rgba(0, 212, 255, 0.45);
 }
 
-.bp-choice[aria-pressed="true"] .bp-choice-indicator {
+.bp-choice[aria-pressed="true"] .bp-choice-indicator,
+.bp-choice[aria-checked="true"] .bp-choice-indicator {
   background: var(--bp-cyan);
   border-color: var(--bp-cyan);
 }
 
-.bp-choice[aria-pressed="true"] .bp-choice-indicator svg {
+.bp-choice[aria-pressed="true"] .bp-choice-indicator svg,
+.bp-choice[aria-checked="true"] .bp-choice-indicator svg {
   opacity: 1;
   transform: scale(1);
 }
@@ -763,6 +789,28 @@ textarea.bp-field {
 /* =========================================================
    NAVIGATION (Back = secondary, Continue = primary)
 ========================================================= */
+
+/* Wraps the button row + disabled hint. Sticky to the viewport bottom on
+   mobile so the primary action stays reachable on long steps. */
+.bp-nav-dock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (max-width: 767px) {
+  .bp-nav-dock {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    margin: 0 calc(-1 * var(--bp-card-pad-x, 22px));
+    padding: 0 var(--bp-card-pad-x, 22px)
+      calc(12px + env(safe-area-inset-bottom, 0px));
+    background: rgba(10, 22, 40, 0.95);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
+}
 
 /*
  * Row layout by default. If the primary label can't fit beside Back on a

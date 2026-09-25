@@ -57,20 +57,29 @@ export default function SourceStep() {
 
     startTransition(async () => {
       setError(null);
-      const result = await saveStepAnswers({ source_type: selected }, "source");
+      try {
+        const result = await saveStepAnswers({ source_type: selected }, "source");
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+
+        router.push(result.next);
+      } catch {
+        setError("Something went wrong saving your answers. Please try again.");
       }
-
-      router.push(result.next);
     });
   }
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2.5">
+      <div
+        className="space-y-2.5"
+        role="radiogroup"
+        aria-label="Where are you starting from?"
+        aria-required="true"
+      >
         {OPTIONS.map((option) => (
           <ChoiceCard
             key={option.id}
@@ -93,6 +102,7 @@ export default function SourceStep() {
         isPending={isPending}
         isValid={!!selected}
         onContinue={handleContinue}
+        disabledHint="Select an option to continue"
       />
     </div>
   );

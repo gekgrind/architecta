@@ -98,7 +98,12 @@ export async function middleware(req: NextRequest) {
   }
 
   if (user && onboardingComplete && isOnboarding) {
-    return NextResponse.redirect(new URL(APP_HOME_PATH, req.url));
+    const isDevPreview =
+      process.env.NODE_ENV === "development" &&
+      pathname.startsWith("/onboarding/preview");
+    if (!isDevPreview) {
+      return NextResponse.redirect(new URL(APP_HOME_PATH, req.url));
+    }
   }
 
   const isArchitectaArea =

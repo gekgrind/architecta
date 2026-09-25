@@ -57,21 +57,25 @@ export default function CustomersStep({ answers }: CustomersStepProps) {
 
     startTransition(async () => {
       setError(null);
-      const result = await saveStepAnswers(
-        {
-          customer_role: role.trim(),
-          customer_pains: pains,
-          customer_outcome: outcome.trim(),
-        },
-        "customers"
-      );
+      try {
+        const result = await saveStepAnswers(
+          {
+            customer_role: role.trim(),
+            customer_pains: pains,
+            customer_outcome: outcome.trim(),
+          },
+          "customers"
+        );
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+
+        router.push(result.next);
+      } catch {
+        setError("Something went wrong saving your answers. Please try again.");
       }
-
-      router.push(result.next);
     });
   }
 
@@ -80,7 +84,7 @@ export default function CustomersStep({ answers }: CustomersStepProps) {
       <div className="space-y-6">
         <div className="space-y-2">
           <label htmlFor="onb-customer-role" className="bp-label">
-            Your ideal customer
+            Your ideal customer <span className="text-cyan-500" aria-hidden="true">*</span>
           </label>
           <input
             id="onb-customer-role"
@@ -88,13 +92,14 @@ export default function CustomersStep({ answers }: CustomersStepProps) {
             value={role}
             onChange={(e) => setRole(e.target.value)}
             placeholder="Solo founders, busy professionals, local business owners…"
+            aria-required="true"
             className="bp-field"
           />
         </div>
 
         <div className="space-y-3">
           <p id="onb-customer-pains" className="bp-label">
-            What are they struggling with?
+            What are they struggling with? <span className="text-cyan-500" aria-hidden="true">*</span>
           </p>
 
           <div
@@ -117,7 +122,7 @@ export default function CustomersStep({ answers }: CustomersStepProps) {
 
         <div className="space-y-2">
           <label htmlFor="onb-customer-outcome" className="bp-label">
-            What outcome do they want?
+            What outcome do they want? <span className="text-cyan-500" aria-hidden="true">*</span>
           </label>
           <textarea
             id="onb-customer-outcome"
@@ -125,6 +130,7 @@ export default function CustomersStep({ answers }: CustomersStepProps) {
             value={outcome}
             onChange={(e) => setOutcome(e.target.value)}
             placeholder="What does success look like for them?"
+            aria-required="true"
             className="bp-field"
           />
         </div>
@@ -141,6 +147,7 @@ export default function CustomersStep({ answers }: CustomersStepProps) {
         isPending={isPending}
         isValid={isValid}
         onContinue={handleContinue}
+        disabledHint="Complete all required fields to continue"
       />
     </div>
   );
