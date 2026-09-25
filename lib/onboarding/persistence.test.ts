@@ -428,6 +428,95 @@ describe("completeArchitectaOnboardingWithData", () => {
 
     expect(result).toEqual({ ok: false, error: "Not authenticated" });
   });
+
+  it("falls back to website-analysis offers/mission when no onboarding step set them", async () => {
+    const supabase = makeSupabaseMock();
+
+    await completeArchitectaOnboardingWithData({
+      brand_name: "TestBrand",
+      website_analysis: {
+        offers: "Brand kit generation",
+        mission: "Make brand-building accessible to every founder.",
+        confidence: "high",
+        analyzed_at: "2026-01-01T00:00:00.000Z",
+      },
+    });
+
+    const upsertCall = supabase.upsert.mock.calls[0][0];
+    expect(upsertCall.offers).toBe("Brand kit generation");
+    expect(upsertCall.mission).toBe("Make brand-building accessible to every founder.");
+  });
+
+  it("never lets website-analysis offers/mission override a user-entered answer", async () => {
+    const supabase = makeSupabaseMock();
+
+    await completeArchitectaOnboardingWithData({
+      offers: "User-entered offer",
+      mission: "User-entered mission",
+      website_analysis: {
+        offers: "Website-derived offer",
+        mission: "Website-derived mission",
+        confidence: "high",
+        analyzed_at: "2026-01-01T00:00:00.000Z",
+      },
+    });
+
+    const upsertCall = supabase.upsert.mock.calls[0][0];
+    expect(upsertCall.offers).toBe("User-entered offer");
+    expect(upsertCall.mission).toBe("User-entered mission");
+  });
+
+  it("does not fall back to a low-confidence website analysis for offers/mission", async () => {
+    const supabase = makeSupabaseMock();
+
+    await completeArchitectaOnboardingWithData({
+      description: "Fallback description",
+      website_analysis: {
+        offers: "Guessed offer",
+        mission: "Guessed mission",
+        confidence: "low",
+        analyzed_at: "2026-01-01T00:00:00.000Z",
+      },
+    });
+
+    const upsertCall = supabase.upsert.mock.calls[0][0];
+    expect(upsertCall.mission).toBeUndefined();
+    // offers still falls back to description, just never to the low-confidence guess.
+    expect(upsertCall.offers).toBe("Fallback description");
+  });
+
+  it("preserves topics/differentiators/cta_patterns as business intelligence in source instead of discarding them", async () => {
+    const supabase = makeSupabaseMock();
+
+    await completeArchitectaOnboardingWithData({
+      website_analysis: {
+        topics: ["brand building", "content strategy"],
+        differentiators: ["Built for solo founders"],
+        cta_patterns: ["Start building"],
+        confidence: "medium",
+        analyzed_at: "2026-01-01T00:00:00.000Z",
+      },
+    });
+
+    const upsertCall = supabase.upsert.mock.calls[0][0];
+    expect(upsertCall.source.websiteInsights).toEqual({
+      topics: ["brand building", "content strategy"],
+      differentiators: ["Built for solo founders"],
+      cta_patterns: ["Start building"],
+      confidence: "medium",
+      analyzed_at: "2026-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("omits websiteInsights when there is no website analysis", async () => {
+    const supabase = makeSupabaseMock();
+
+    await completeArchitectaOnboardingWithData({ brand_name: "TestBrand" });
+
+    const upsertCall = supabase.upsert.mock.calls[0][0];
+    expect(upsertCall.source.websiteInsights).toBeUndefined();
+    expect(upsertCall.source.hasWebsiteAnalysis).toBe(false);
+  });
 });
 
 /* =======================================================

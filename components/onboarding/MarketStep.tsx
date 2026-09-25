@@ -6,6 +6,7 @@ import { saveStepAnswers } from "@/lib/onboarding/actions";
 import StepNavigation from "@/components/onboarding/StepNavigation";
 import { getPreviousStepUrl } from "@/lib/onboarding/steps";
 import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
+import { confidentWebsiteValue } from "@/lib/onboarding/website-step-flow";
 
 type MarketStepProps = {
   answers: OnboardingAnswers;
@@ -17,8 +18,14 @@ export default function MarketStep({ answers }: MarketStepProps) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
+  const wa = answers.website_analysis;
+  // industry ("SaaS, wellness, ecommerce…") is the same shape of answer
+  // this step asks for as "primary market" — a confident website read is a
+  // reasonable starting suggestion here, never a silent low-confidence guess.
+  const suggestedMarket = confidentWebsiteValue(wa?.industry, wa?.confidence);
+
   const [primaryMarket, setPrimaryMarket] = useState(
-    answers.primary_market ?? ""
+    answers.primary_market ?? suggestedMarket ?? ""
   );
   const [niche, setNiche] = useState(
     answers.niche ?? ""
@@ -63,6 +70,14 @@ export default function MarketStep({ answers }: MarketStepProps) {
 
   return (
     <div className="space-y-8">
+      {suggestedMarket && !answers.primary_market && (
+        <div className="bp-notice">
+          <p>
+            Based on your website, we&apos;ve filled this in for you: <strong>{suggestedMarket}</strong>. Change anything that doesn&apos;t look right.
+          </p>
+        </div>
+      )}
+
       <div className="space-y-6">
         <div className="space-y-2">
           <label htmlFor="onb-primary-market" className="bp-label">

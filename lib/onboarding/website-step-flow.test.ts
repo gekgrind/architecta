@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   analyzeWebsiteForStep,
+  confidentWebsiteValue,
   inferToneOptionId,
   matchWebsiteValuesToOptions,
   WEBSITE_ANALYSIS_FAILED_MESSAGE,
@@ -75,6 +76,30 @@ describe("matchWebsiteValuesToOptions", () => {
 
   it("does not duplicate an option matched by more than one token", () => {
     expect(matchWebsiteValuesToOptions("Trust, Trustworthy", VALUE_OPTIONS)).toEqual(["Trust"]);
+  });
+});
+
+describe("confidentWebsiteValue", () => {
+  it("returns the value at high or medium confidence", () => {
+    expect(confidentWebsiteValue("Acme", "high")).toBe("Acme");
+    expect(confidentWebsiteValue("Acme", "medium")).toBe("Acme");
+  });
+
+  it("treats a low-confidence analysis as context only, not an answer", () => {
+    expect(confidentWebsiteValue("Acme", "low")).toBeUndefined();
+  });
+
+  it("returns undefined for an absent or empty value regardless of confidence", () => {
+    expect(confidentWebsiteValue(undefined, "high")).toBeUndefined();
+    expect(confidentWebsiteValue("", "high")).toBeUndefined();
+  });
+
+  it("returns undefined when confidence itself is absent", () => {
+    expect(confidentWebsiteValue("Acme", undefined)).toBeUndefined();
+  });
+
+  it("passes through non-string values (e.g. arrays) unchanged when confident", () => {
+    expect(confidentWebsiteValue(["a", "b"], "high")).toEqual(["a", "b"]);
   });
 });
 

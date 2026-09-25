@@ -7,6 +7,7 @@ import AISuggestions from "@/components/onboarding/AISuggestions";
 import StepNavigation from "@/components/onboarding/StepNavigation";
 import { getPreviousStepUrl } from "@/lib/onboarding/steps";
 import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
+import { confidentWebsiteValue } from "@/lib/onboarding/website-step-flow";
 
 type SnapshotStepProps = {
   answers: OnboardingAnswers;
@@ -23,18 +24,24 @@ export default function SnapshotStep({
   const [error, setError] = useState<string | null>(null);
 
   const wa = answers.website_analysis;
+  // A "low" confidence analysis is context, not an answer — don't silently
+  // populate a required field from a guess the site barely supports.
+  const confidentBrandName = confidentWebsiteValue(wa?.brand_name, wa?.confidence);
+  const confidentIndustry = confidentWebsiteValue(wa?.industry, wa?.confidence);
+  const confidentDescription = confidentWebsiteValue(wa?.description, wa?.confidence);
 
   const [brandName, setBrandName] = useState(
-    answers.brand_name ?? wa?.brand_name ?? ""
+    answers.brand_name ?? confidentBrandName ?? ""
   );
   const [industry, setIndustry] = useState(
-    answers.industry ?? wa?.industry ?? ""
+    answers.industry ?? confidentIndustry ?? ""
   );
   const [description, setDescription] = useState(
-    answers.description ?? wa?.description ?? ""
+    answers.description ?? confidentDescription ?? ""
   );
 
-  const prefilled = hasExistingContext || !!wa;
+  const websitePrefilled = !!(confidentBrandName || confidentIndustry || confidentDescription);
+  const prefilled = hasExistingContext || websitePrefilled;
 
   const isValid =
     brandName.trim().length > 0 &&
@@ -73,7 +80,7 @@ export default function SnapshotStep({
       {prefilled && (
         <div className="bp-notice">
           <p>
-            {wa
+            {websitePrefilled
               ? "Pre-filled from your website analysis. Review and adjust anything that doesn't look right."
               : "Pre-filled from your Entrepreneuria profile. Review and adjust as needed."}
           </p>

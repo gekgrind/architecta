@@ -5,12 +5,28 @@
    (server). Must not import server-only modules.
 ======================================================= */
 
+import type { WebsiteAnalysisResult } from "./persistence";
+
 export const WEBSITE_ANALYSIS_FAILED_MESSAGE =
   "We couldn't analyze your website automatically. You can try again or continue manually.";
 
 export type WebsiteAnalysisOutcome = { ok: true } | { ok: false; error: string };
 
 type AnalyzeResult = { ok: true } | { ok: false; error?: string };
+
+/**
+ * Gates a website-derived value on the analysis's own confidence: a "low"
+ * confidence analysis is treated as context only, never a silent answer.
+ * Empty/falsy values are treated as absent regardless of confidence.
+ */
+export function confidentWebsiteValue<T>(
+  value: T | undefined,
+  confidence: WebsiteAnalysisResult["confidence"] | undefined
+): T | undefined {
+  if (!value) return undefined;
+  if (confidence !== "high" && confidence !== "medium") return undefined;
+  return value;
+}
 
 /* =======================================================
    Website-derived suggestions → step field inference
