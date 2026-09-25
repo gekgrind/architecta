@@ -379,6 +379,11 @@ export async function completeArchitectaOnboardingWithData(
 
   if (!user) return { ok: false, error: "Not authenticated" };
 
+  // A "low" confidence analysis is context, not a fact — it backfills gaps
+  // in the brand profile below but never overwrites a real user answer.
+  const wa = answers.website_analysis;
+  const websiteConfident = !!wa && wa.confidence !== "low";
+
   // 1. Persist shared business facts to profiles
   const sharedResult = await persistSharedBusinessFacts({
     industry: answers.industry,
@@ -410,8 +415,11 @@ export async function completeArchitectaOnboardingWithData(
     topics: answers.words_to_use
       ? { include: answers.words_to_use, avoid: answers.words_to_avoid ?? [] }
       : undefined,
-    offers: answers.offers ?? answers.description,
-    mission: answers.mission,
+    // offers/mission are extracted during website analysis but no onboarding
+    // step asks about them directly — fall back to that evidence instead of
+    // discarding it, but only ever as a gap-filler behind the user's answer.
+    offers: answers.offers ?? (websiteConfident ? wa?.offers : undefined) ?? answers.description,
+    mission: answers.mission ?? (websiteConfident ? wa?.mission : undefined),
     vision: answers.vision,
     values: answers.brand_values?.join(", "),
     typical_customers: answers.typical_customers ?? answers.customer_role,
@@ -419,8 +427,22 @@ export async function completeArchitectaOnboardingWithData(
     required_elements: answers.words_to_use,
     source: {
       onboarding: true,
-      hasWebsiteAnalysis: !!answers.website_analysis,
+      hasWebsiteAnalysis: !!wa,
       completedAt: new Date().toISOString(),
+      // topics/differentiators/cta_patterns have no onboarding question of
+      // their own — preserved here as business intelligence instead of
+      // being thrown away after paying the model cost to extract them.
+      ...(wa
+        ? {
+            websiteInsights: {
+              topics: wa.topics,
+              differentiators: wa.differentiators,
+              cta_patterns: wa.cta_patterns,
+              confidence: wa.confidence,
+              analyzed_at: wa.analyzed_at,
+            },
+          }
+        : {}),
     },
   });
 

@@ -218,6 +218,164 @@ Here is the analysis:
 });
 
 /* =======================================================
+   Bounded secondary page discovery (end-to-end)
+======================================================= */
+
+describe("runWebsiteAnalysis — secondary page discovery", () => {
+  const ABOUT_URL = `${SITE_URL}/about`;
+  const PRICING_URL = `${SITE_URL}/pricing`;
+
+  const HOMEPAGE_WITH_LINKS = `<html><head><title>Acme Growth Studio</title>
+<meta name="description" content="Acme helps B2B founders build repeatable content systems."></head>
+<body><h1>Build a growth engine</h1><p>Acme Growth Studio designs content systems for bootstrapped SaaS founders.</p>
+<nav><a href="/about">About us</a><a href="/pricing">Pricing</a></nav>
+<p>Book a strategy call today.</p></body></html>`;
+
+  const ABOUT_HTML = `<html><body><h1>Our story</h1><p>Founded in 2021 to help SaaS founders skip the growth-marketing guesswork.</p>
+<a href="/careers">Careers</a></body></html>`;
+
+  beforeEach(() => {
+    nvidiaReply = () => nvidiaContent('{"brand_name": "Acme Growth Studio", "confidence": "high"}');
+  });
+
+  it("fetches same-origin About/Pricing pages linked from the homepage and includes them in one model call", async () => {
+    fetchMock.mockImplementation(async (input: string | URL) => {
+      const url = String(input);
+      if (url === SITE_URL) return htmlResponse(HOMEPAGE_WITH_LINKS, url);
+      if (url === ABOUT_URL) return htmlResponse(ABOUT_HTML, url);
+      if (url === PRICING_URL) return htmlResponse("<html><body><p>Starter plan: $29/mo.</p></body></html>", url);
+      if (url === NVIDIA_URL) return nvidiaReply();
+      return new Response("unexpected outbound call", { status: 500 });
+    });
+
+    const result = await runWebsiteAnalysis(SITE_URL);
+
+    expect(result.ok).toBe(true);
+    expect(calledUrls().sort()).toEqual([ABOUT_URL, NVIDIA_URL, PRICING_URL, SITE_URL].sort());
+
+    const body = JSON.parse(nvidiaCalls()[0][1].body);
+    const prompt: string = body.messages[1].content;
+    expect(prompt).toContain("ABOUT PAGE");
+    expect(prompt).toContain("Founded in 2021");
+    expect(prompt).toContain("PRICING PAGE");
+    expect(prompt).toContain("Starter plan");
+    // Still exactly one model call for however many pages were combined.
+    expect(nvidiaCalls()).toHaveLength(1);
+  });
+
+  it("falls back to homepage-only analysis when a secondary page fails, without failing the whole analysis", async () => {
+    fetchMock.mockImplementation(async (input: string | URL) => {
+      const url = String(input);
+      if (url === SITE_URL) return htmlResponse(HOMEPAGE_WITH_LINKS, url);
+      if (url === ABOUT_URL) return htmlResponse(ABOUT_HTML, url);
+      if (url === PRICING_URL) return new Response("not found", { status: 404 });
+      if (url === NVIDIA_URL) return nvidiaReply();
+      return new Response("unexpected outbound call", { status: 500 });
+    });
+
+    const result = await runWebsiteAnalysis(SITE_URL);
+
+    expect(result.ok).toBe(true);
+    const body = JSON.parse(nvidiaCalls()[0][1].body);
+    const prompt: string = body.messages[1].content;
+    expect(prompt).toContain("ABOUT PAGE");
+    expect(prompt).not.toContain("PRICING PAGE");
+  });
+
+  it("still succeeds homepage-only when every secondary page fetch fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    fetchMock.mockImplementation(async (input: string | URL) => {
+      const url = String(input);
+      if (url === SITE_URL) return htmlResponse(HOMEPAGE_WITH_LINKS, url);
+      if (url === ABOUT_URL || url === PRICING_URL) throw new TypeError("fetch failed");
+      if (url === NVIDIA_URL) return nvidiaReply();
+      return new Response("unexpected outbound call", { status: 500 });
+    });
+
+    const result = await runWebsiteAnalysis(SITE_URL);
+
+    expect(result.ok).toBe(true);
+    const body = JSON.parse(nvidiaCalls()[0][1].body);
+    expect(body.messages[1].content).toContain("Build a growth engine");
+  });
+
+  it("does not recurse into links found on a secondary page", async () => {
+    fetchMock.mockImplementation(async (input: string | URL) => {
+      const url = String(input);
+      if (url === SITE_URL) return htmlResponse(HOMEPAGE_WITH_LINKS, url);
+      // ABOUT_HTML itself links to /careers — that must never be fetched.
+      if (url === ABOUT_URL) return htmlResponse(ABOUT_HTML, url);
+      if (url === PRICING_URL) return htmlResponse("<html><body>Pricing</body></html>", url);
+      if (url === NVIDIA_URL) return nvidiaReply();
+      return new Response("unexpected outbound call", { status: 500 });
+    });
+
+    await runWebsiteAnalysis(SITE_URL);
+
+    expect(calledUrls()).not.toContain(`${SITE_URL}/careers`);
+  });
+
+  it("does not follow a secondary page redirect to an unsafe host", async () => {
+    fetchMock.mockImplementation(async (input: string | URL) => {
+      const url = String(input);
+      if (url === SITE_URL) return htmlResponse(HOMEPAGE_WITH_LINKS, url);
+      if (url === ABOUT_URL) {
+        // Simulate a same-origin link that redirects off-site to a private IP.
+        return htmlResponse(ABOUT_HTML, "http://169.254.169.254/about");
+      }
+      if (url === PRICING_URL) return htmlResponse("<html><body>Pricing info</body></html>", url);
+      if (url === NVIDIA_URL) return nvidiaReply();
+      return new Response("unexpected outbound call", { status: 500 });
+    });
+
+    const result = await runWebsiteAnalysis(SITE_URL);
+
+    expect(result.ok).toBe(true);
+    const body = JSON.parse(nvidiaCalls()[0][1].body);
+    expect(body.messages[1].content).not.toContain("Founded in 2021");
+  });
+
+  it("uses JSON-LD/OpenGraph facts as a fallback when the model's own extraction misses them", async () => {
+    const HOMEPAGE_WITH_JSONLD = `<html><head><title>Acme</title>
+<script type="application/ld+json">{"@type":"Organization","name":"Acme Growth Studio","description":"Content systems for SaaS founders."}</script>
+</head><body><p>Some homepage copy that never restates the brand name.</p></body></html>`;
+
+    fetchMock.mockImplementation(async (input: string | URL) => {
+      const url = String(input);
+      if (url === SITE_URL) return htmlResponse(HOMEPAGE_WITH_JSONLD, url);
+      if (url === NVIDIA_URL) return nvidiaContent('{"confidence": "medium"}');
+      return new Response("unexpected outbound call", { status: 500 });
+    });
+
+    const result = await runWebsiteAnalysis(SITE_URL);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.analysis.brand_name).toBe("Acme Growth Studio");
+    expect(result.analysis.description).toBe("Content systems for SaaS founders.");
+  });
+
+  it("never lets a website-provided JSON-LD field override the model's own answer", async () => {
+    const HOMEPAGE_WITH_JSONLD = `<html><head><title>Acme</title>
+<script type="application/ld+json">{"@type":"Organization","name":"Wrong Name From JSON-LD"}</script>
+</head><body><p>Acme designs content systems for bootstrapped SaaS founders who want predictable pipeline and growth.</p></body></html>`;
+
+    fetchMock.mockImplementation(async (input: string | URL) => {
+      const url = String(input);
+      if (url === SITE_URL) return htmlResponse(HOMEPAGE_WITH_JSONLD, url);
+      if (url === NVIDIA_URL) return nvidiaContent('{"brand_name": "Model-Extracted Name", "confidence": "high"}');
+      return new Response("unexpected outbound call", { status: 500 });
+    });
+
+    const result = await runWebsiteAnalysis(SITE_URL);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.analysis.brand_name).toBe("Model-Extracted Name");
+  });
+});
+
+/* =======================================================
    Structured output resilience
 ======================================================= */
 
