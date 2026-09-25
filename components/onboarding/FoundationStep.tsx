@@ -7,6 +7,7 @@ import StepNavigation from "@/components/onboarding/StepNavigation";
 import ChoiceCard from "@/components/onboarding/ChoiceCard";
 import { getPreviousStepUrl } from "@/lib/onboarding/steps";
 import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
+import { matchWebsiteValuesToOptions } from "@/lib/onboarding/website-step-flow";
 
 type FoundationStepProps = {
   answers: OnboardingAnswers;
@@ -29,8 +30,11 @@ export default function FoundationStep({ answers }: FoundationStepProps) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
+  const wa = answers.website_analysis;
+  const suggestedValues = matchWebsiteValuesToOptions(wa?.values, VALUE_OPTIONS);
+
   const [values, setValues] = useState<string[]>(
-    answers.brand_values ?? []
+    answers.brand_values ?? suggestedValues
   );
 
   const [boldness, setBoldness] = useState(
@@ -85,6 +89,14 @@ export default function FoundationStep({ answers }: FoundationStepProps) {
 
   return (
     <div className="space-y-8">
+      {suggestedValues.length > 0 && !answers.brand_values && (
+        <div className="bp-notice">
+          <p>
+            Pre-selected based on your website: <strong>{suggestedValues.join(", ")}</strong>. Adjust as needed.
+          </p>
+        </div>
+      )}
+
       <div className="space-y-4">
         <p id="onb-core-values" className="bp-label">
           Core values (choose up to 5) <span className="text-cyan-500" aria-hidden="true">*</span>
