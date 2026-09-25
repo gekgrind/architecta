@@ -11,26 +11,53 @@ export default function FinishStep() {
 
   useEffect(() => {
     startTransition(async () => {
-      const result = await completeOnboarding();
-      if (!result.ok) {
-        setError(result.error ?? "Something went wrong completing your setup.");
-        return;
+      try {
+        const result = await completeOnboarding();
+        if (!result.ok) {
+          setError(result.error ?? "Something went wrong completing your setup.");
+          return;
+        }
+        router.push(result.next ?? "/dashboard");
+      } catch {
+        setError("Something went wrong completing your setup. Please try again.");
       }
-      router.push(result.next ?? "/dashboard");
     });
   }, [router]);
 
   if (error) {
     return (
       <div className="space-y-4 text-center">
-        <p className="text-red-400">{error}</p>
-        <button
-          type="button"
-          className="text-indigo-400 underline text-sm"
-          onClick={() => router.push("/onboarding/review")}
-        >
-          Go back to review
-        </button>
+        <p className="text-red-400" role="alert">{error}</p>
+        <div className="flex gap-3 justify-center">
+          <button
+            type="button"
+            className="text-indigo-400 underline text-sm"
+            onClick={() => {
+              setError(null);
+              startTransition(async () => {
+                try {
+                  const result = await completeOnboarding();
+                  if (!result.ok) {
+                    setError(result.error ?? "Something went wrong completing your setup.");
+                    return;
+                  }
+                  router.push(result.next ?? "/dashboard");
+                } catch {
+                  setError("Something went wrong completing your setup. Please try again.");
+                }
+              });
+            }}
+          >
+            Try again
+          </button>
+          <button
+            type="button"
+            className="text-slate-400 underline text-sm"
+            onClick={() => router.push("/onboarding/review")}
+          >
+            Go back to review
+          </button>
+        </div>
       </div>
     );
   }

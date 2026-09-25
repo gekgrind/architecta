@@ -148,7 +148,7 @@ export default function WebsiteStep({
         </div>
       )}
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && <p className="text-red-400 text-sm" role="alert">{error}</p>}
 
       {analysisFailed && hasWebsite === true && (
         <Button

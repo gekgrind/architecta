@@ -36,24 +36,28 @@ export default function MarketStep({ answers }: MarketStepProps) {
 
     startTransition(async () => {
       setError(null);
-      const result = await saveStepAnswers(
-        {
-          primary_market: primaryMarket.trim(),
-          niche: niche.trim(),
-          competitors: competitors
-            .split(",")
-            .map((c) => c.trim())
-            .filter(Boolean),
-        },
-        "market"
-      );
+      try {
+        const result = await saveStepAnswers(
+          {
+            primary_market: primaryMarket.trim(),
+            niche: niche.trim(),
+            competitors: competitors
+              .split(",")
+              .map((c) => c.trim())
+              .filter(Boolean),
+          },
+          "market"
+        );
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+
+        router.push(result.next);
+      } catch {
+        setError("Something went wrong saving your answers. Please try again.");
       }
-
-      router.push(result.next);
     });
   }
 
@@ -71,26 +75,28 @@ export default function MarketStep({ answers }: MarketStepProps) {
       <div className="space-y-6">
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">
-            Primary market
+            Primary market <span className="text-cyan-500" aria-hidden="true">*</span>
           </label>
           <input
             type="text"
             value={primaryMarket}
             onChange={(e) => setPrimaryMarket(e.target.value)}
             placeholder="B2B SaaS, wellness, ecommerce, creators, etc."
+            aria-required="true"
             className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
           />
         </div>
 
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">
-            Niche or focus area
+            Niche or focus area <span className="text-cyan-500" aria-hidden="true">*</span>
           </label>
           <input
             type="text"
             value={niche}
             onChange={(e) => setNiche(e.target.value)}
             placeholder="Early-stage founders, solo consultants, local services…"
+            aria-required="true"
             className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
           />
         </div>
@@ -112,13 +118,14 @@ export default function MarketStep({ answers }: MarketStepProps) {
         </div>
       </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && <p className="text-red-400 text-sm" role="alert">{error}</p>}
 
       <StepNavigation
         backUrl={getPreviousStepUrl("market")}
         isPending={isPending}
         isValid={isValid}
         onContinue={handleContinue}
+        disabledHint="Fill in primary market and niche to continue"
       />
     </div>
   );

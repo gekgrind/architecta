@@ -45,23 +45,32 @@ export default function BlueprintOnboarding({ step, context }: Props) {
     steps.length > 0 ? ((stepIndex + 1) / steps.length) * 100 : 0;
 
   const [direction, setDirection] = useState<Direction>("forward");
+  const [navError, setNavError] = useState<string | null>(null);
 
   if (!currentStep) return null;
 
   const goBack = () => {
     const prev = steps[stepIndex - 1];
     if (!prev) return;
+    setNavError(null);
     setDirection("back");
     router.push(`/onboarding/${prev.id}`);
   };
 
   const onForwardStart = async () => {
     setDirection("forward");
+    setNavError(null);
 
-    const res = await advanceArchitectaOnboardingStepClient(currentStep.id);
+    try {
+      const res = await advanceArchitectaOnboardingStepClient(currentStep.id);
 
-    if (res.ok && res.next) {
-      router.push(res.next);
+      if (res.ok && res.next) {
+        router.push(res.next);
+      } else if (!res.ok) {
+        setNavError(res.error ?? "Something went wrong. Please try again.");
+      }
+    } catch {
+      setNavError("Something went wrong. Please try again.");
     }
   };
 
@@ -133,6 +142,7 @@ export default function BlueprintOnboarding({ step, context }: Props) {
               isLast={stepIndex === steps.length - 1}
               onBack={goBack}
               onForwardStart={onForwardStart}
+              error={navError}
             />
           </motion.div>
         </AnimatePresence>

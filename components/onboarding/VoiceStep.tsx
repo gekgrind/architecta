@@ -50,31 +50,35 @@ export default function VoiceStep({ answers }: VoiceStepProps) {
 
     startTransition(async () => {
       setError(null);
-      const result = await saveStepAnswers(
-        {
-          voice_tone: tone,
-          words_to_use: wordsToUse
-            .split(",")
-            .map((w) => w.trim())
-            .filter(Boolean),
-          words_to_avoid: wordsToAvoid
-            .split(",")
-            .map((w) => w.trim())
-            .filter(Boolean),
-          reference_brands: references
-            .split(",")
-            .map((r) => r.trim())
-            .filter(Boolean),
-        },
-        "voice"
-      );
+      try {
+        const result = await saveStepAnswers(
+          {
+            voice_tone: tone,
+            words_to_use: wordsToUse
+              .split(",")
+              .map((w) => w.trim())
+              .filter(Boolean),
+            words_to_avoid: wordsToAvoid
+              .split(",")
+              .map((w) => w.trim())
+              .filter(Boolean),
+            reference_brands: references
+              .split(",")
+              .map((r) => r.trim())
+              .filter(Boolean),
+          },
+          "voice"
+        );
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+
+        router.push(result.next);
+      } catch {
+        setError("Something went wrong saving your answers. Please try again.");
       }
-
-      router.push(result.next);
     });
   }
 
@@ -100,7 +104,7 @@ export default function VoiceStep({ answers }: VoiceStepProps) {
 
       <div className="space-y-4">
         <label className="block text-sm font-medium text-slate-300">
-          Overall tone
+          Overall tone <span className="text-cyan-500" aria-hidden="true">*</span>
         </label>
 
         <div className="grid gap-2">
@@ -172,13 +176,14 @@ export default function VoiceStep({ answers }: VoiceStepProps) {
         </div>
       </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && <p className="text-red-400 text-sm" role="alert">{error}</p>}
 
       <StepNavigation
         backUrl={getPreviousStepUrl("voice")}
         isPending={isPending}
         isValid={isValid}
         onContinue={handleContinue}
+        disabledHint="Select a tone to continue"
       />
     </div>
   );

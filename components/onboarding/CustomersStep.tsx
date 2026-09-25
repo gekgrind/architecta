@@ -56,21 +56,25 @@ export default function CustomersStep({ answers }: CustomersStepProps) {
 
     startTransition(async () => {
       setError(null);
-      const result = await saveStepAnswers(
-        {
-          customer_role: role.trim(),
-          customer_pains: pains,
-          customer_outcome: outcome.trim(),
-        },
-        "customers"
-      );
+      try {
+        const result = await saveStepAnswers(
+          {
+            customer_role: role.trim(),
+            customer_pains: pains,
+            customer_outcome: outcome.trim(),
+          },
+          "customers"
+        );
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+
+        router.push(result.next);
+      } catch {
+        setError("Something went wrong saving your answers. Please try again.");
       }
-
-      router.push(result.next);
     });
   }
 
@@ -88,20 +92,21 @@ export default function CustomersStep({ answers }: CustomersStepProps) {
       <div className="space-y-6">
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">
-            Your ideal customer
+            Your ideal customer <span className="text-cyan-500" aria-hidden="true">*</span>
           </label>
           <input
             type="text"
             value={role}
             onChange={(e) => setRole(e.target.value)}
             placeholder="Solo founders, busy professionals, local business owners…"
+            aria-required="true"
             className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
           />
         </div>
 
         <div className="space-y-3">
           <label className="block text-sm font-medium text-slate-300">
-            What are they struggling with?
+            What are they struggling with? <span className="text-cyan-500" aria-hidden="true">*</span>
           </label>
 
           <div className="grid gap-2">
@@ -129,25 +134,27 @@ export default function CustomersStep({ answers }: CustomersStepProps) {
 
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">
-            What outcome do they want?
+            What outcome do they want? <span className="text-cyan-500" aria-hidden="true">*</span>
           </label>
           <textarea
             rows={3}
             value={outcome}
             onChange={(e) => setOutcome(e.target.value)}
             placeholder="What does success look like for them?"
+            aria-required="true"
             className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none resize-none"
           />
         </div>
       </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && <p className="text-red-400 text-sm" role="alert">{error}</p>}
 
       <StepNavigation
         backUrl={getPreviousStepUrl("customers")}
         isPending={isPending}
         isValid={isValid}
         onContinue={handleContinue}
+        disabledHint="Complete all required fields to continue"
       />
     </div>
   );

@@ -39,8 +39,8 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: "source",
     number: "01",
-    title: "Starting point",
-    subtitle: "How Architecta should learn about your brand",
+    title: "Where are you starting from?",
+    subtitle: "This helps Architecta tailor your setup",
     type: "source",
   },
 

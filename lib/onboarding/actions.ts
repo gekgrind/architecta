@@ -19,6 +19,12 @@ import {
 import { analyzeWebsite } from "./website-analysis";
 import { WEBSITE_ANALYSIS_FAILED_MESSAGE } from "./website-step-flow";
 
+const SAVE_FAILED_MESSAGE =
+  "Something went wrong saving your answers. Please try again.";
+
+const AUTH_EXPIRED_MESSAGE =
+  "Your session has expired. Please sign in again to continue.";
+
 /* =======================================================
    Types
 ======================================================= */
@@ -53,20 +59,25 @@ export async function saveStepAnswers(
     }
   }
 
-  const { session } = await getOrCreateArchitectaOnboarding();
+  try {
+    const { session } = await getOrCreateArchitectaOnboarding();
 
-  const result = await saveOnboardingProgress(session.id, stepAnswers, step);
+    const result = await saveOnboardingProgress(session.id, stepAnswers, step);
 
-  if (!result.ok) {
-    return { ok: false, error: result.error };
+    if (!result.ok) {
+      return { ok: false, error: result.error };
+    }
+
+    const currentIndex = ONBOARDING_STEPS.findIndex((s) => s.id === step);
+    const nextStep = ONBOARDING_STEPS[currentIndex + 1]?.id ?? "finish";
+
+    await updateOnboardingStep(nextStep as ArchitectaOnboardingStep, false);
+
+    return { ok: true, next: `/onboarding/${nextStep}` };
+  } catch (err) {
+    console.error("[saveStepAnswers] unexpected failure:", err instanceof Error ? err.message : err);
+    return { ok: false, error: SAVE_FAILED_MESSAGE };
   }
-
-  const currentIndex = ONBOARDING_STEPS.findIndex((s) => s.id === step);
-  const nextStep = ONBOARDING_STEPS[currentIndex + 1]?.id ?? "finish";
-
-  await updateOnboardingStep(nextStep as ArchitectaOnboardingStep, false);
-
-  return { ok: true, next: `/onboarding/${nextStep}` };
 }
 
 /* =======================================================
@@ -74,15 +85,20 @@ export async function saveStepAnswers(
 ======================================================= */
 
 export async function updateArchitectaOnboarding(data: Record<string, unknown>) {
-  const { session } = await getOrCreateArchitectaOnboarding();
+  try {
+    const { session } = await getOrCreateArchitectaOnboarding();
 
-  const result = await saveOnboardingProgress(
-    session.id,
-    data as Partial<OnboardingAnswers>,
-    (session.current_step ?? "welcome") as ArchitectaOnboardingStep
-  );
+    const result = await saveOnboardingProgress(
+      session.id,
+      data as Partial<OnboardingAnswers>,
+      (session.current_step ?? "welcome") as ArchitectaOnboardingStep
+    );
 
-  return result;
+    return result;
+  } catch (err) {
+    console.error("[updateArchitectaOnboarding] unexpected failure:", err instanceof Error ? err.message : err);
+    return { ok: false as const, error: SAVE_FAILED_MESSAGE };
+  }
 }
 
 export async function setArchitectaOnboardingStep(step: ArchitectaOnboardingStep) {
@@ -96,25 +112,30 @@ export async function setArchitectaOnboardingStep(step: ArchitectaOnboardingStep
 export async function advanceArchitectaOnboardingStepClient(
   currentStep: ArchitectaOnboardingStep
 ) {
-  const supabase = await createSupabaseServerClient();
+  try {
+    const supabase = await createSupabaseServerClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user) return { ok: false, error: "Not authenticated" as const };
+    if (!user) return { ok: false as const, error: AUTH_EXPIRED_MESSAGE };
 
-  const currentIndex = ONBOARDING_STEPS.findIndex((s) => s.id === currentStep);
+    const currentIndex = ONBOARDING_STEPS.findIndex((s) => s.id === currentStep);
 
-  if (currentIndex === -1) {
-    return { ok: false, error: `Invalid onboarding step: ${currentStep}` as const };
+    if (currentIndex === -1) {
+      return { ok: false as const, error: SAVE_FAILED_MESSAGE };
+    }
+
+    const nextStep = (ONBOARDING_STEPS[currentIndex + 1]?.id ?? "finish") as ArchitectaOnboardingStep;
+
+    await updateOnboardingStep(nextStep, true);
+
+    return { ok: true as const, next: `/onboarding/${nextStep}`, nextStep };
+  } catch (err) {
+    console.error("[advanceStep] unexpected failure:", err instanceof Error ? err.message : err);
+    return { ok: false as const, error: SAVE_FAILED_MESSAGE };
   }
-
-  const nextStep = (ONBOARDING_STEPS[currentIndex + 1]?.id ?? "finish") as ArchitectaOnboardingStep;
-
-  await updateOnboardingStep(nextStep, true);
-
-  return { ok: true as const, next: `/onboarding/${nextStep}`, nextStep };
 }
 
 /* =======================================================
@@ -237,14 +258,19 @@ export async function runWebsiteAnalysis(url: string) {
 ======================================================= */
 
 export async function completeOnboarding() {
-  const session = await loadOnboardingSession();
-  if (!session) return { ok: false, error: "No onboarding session found" };
+  try {
+    const session = await loadOnboardingSession();
+    if (!session) return { ok: false as const, error: AUTH_EXPIRED_MESSAGE };
 
-  const result = await completeArchitectaOnboardingWithData(session.answers);
+    const result = await completeArchitectaOnboardingWithData(session.answers);
 
-  if (!result.ok) {
-    return { ok: false, error: result.error };
+    if (!result.ok) {
+      return { ok: false as const, error: SAVE_FAILED_MESSAGE };
+    }
+
+    return { ok: true as const, next: "/dashboard" };
+  } catch (err) {
+    console.error("[completeOnboarding] unexpected failure:", err instanceof Error ? err.message : err);
+    return { ok: false as const, error: SAVE_FAILED_MESSAGE };
   }
-
-  return { ok: true, next: "/dashboard" };
 }

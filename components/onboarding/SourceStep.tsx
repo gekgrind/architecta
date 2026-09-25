@@ -56,14 +56,18 @@ export default function SourceStep() {
 
     startTransition(async () => {
       setError(null);
-      const result = await saveStepAnswers({ source_type: selected }, "source");
+      try {
+        const result = await saveStepAnswers({ source_type: selected }, "source");
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+
+        router.push(result.next);
+      } catch {
+        setError("Something went wrong saving your answers. Please try again.");
       }
-
-      router.push(result.next);
     });
   }
 
@@ -96,13 +100,14 @@ export default function SourceStep() {
         })}
       </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && <p className="text-red-400 text-sm" role="alert">{error}</p>}
 
       <StepNavigation
         backUrl={getPreviousStepUrl("source")}
         isPending={isPending}
         isValid={!!selected}
         onContinue={handleContinue}
+        disabledHint="Select an option to continue"
       />
     </div>
   );

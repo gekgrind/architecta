@@ -46,21 +46,25 @@ export default function SnapshotStep({
 
     startTransition(async () => {
       setError(null);
-      const result = await saveStepAnswers(
-        {
-          brand_name: brandName.trim(),
-          industry: industry.trim(),
-          description: description.trim(),
-        },
-        "snapshot"
-      );
+      try {
+        const result = await saveStepAnswers(
+          {
+            brand_name: brandName.trim(),
+            industry: industry.trim(),
+            description: description.trim(),
+          },
+          "snapshot"
+        );
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+
+        router.push(result.next);
+      } catch {
+        setError("Something went wrong saving your answers. Please try again.");
       }
-
-      router.push(result.next);
     });
   }
 
@@ -88,39 +92,42 @@ export default function SnapshotStep({
       <div className="space-y-6">
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">
-            Brand or business name
+            Brand or business name <span className="text-cyan-500" aria-hidden="true">*</span>
           </label>
           <input
             type="text"
             value={brandName}
             onChange={(e) => setBrandName(e.target.value)}
             placeholder="Acme Studio"
+            aria-required="true"
             className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
           />
         </div>
 
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">
-            Industry
+            Industry <span className="text-cyan-500" aria-hidden="true">*</span>
           </label>
           <input
             type="text"
             value={industry}
             onChange={(e) => setIndustry(e.target.value)}
             placeholder="SaaS, wellness, ecommerce, creator, etc."
+            aria-required="true"
             className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
           />
         </div>
 
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300">
-            What do you do?
+            What do you do? <span className="text-cyan-500" aria-hidden="true">*</span>
           </label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={4}
             placeholder="Explain it like you would to a smart friend."
+            aria-required="true"
             className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none resize-none"
           />
         </div>
@@ -135,13 +142,14 @@ export default function SnapshotStep({
         onApply={(text) => setDescription(text)}
       />
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && <p className="text-red-400 text-sm" role="alert">{error}</p>}
 
       <StepNavigation
         backUrl={getPreviousStepUrl("snapshot")}
         isPending={isPending}
         isValid={isValid}
         onContinue={handleContinue}
+        disabledHint="Fill in all required fields to continue"
       />
     </div>
   );
