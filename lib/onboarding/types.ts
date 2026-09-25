@@ -27,7 +27,10 @@ export interface OnboardingStep {
   /** Blueprint step number (00–10) */
   number: string;
 
-  /** Short display title */
+  /** Short semantic step name (shown in the card metadata, e.g. "Starting point") */
+  label: string;
+
+  /** Primary question / heading the step asks the user */
   title: string;
 
   /** Supporting description under the title */

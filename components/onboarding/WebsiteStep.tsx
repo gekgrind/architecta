@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import { Button } from "@/components/ui/button";
+import { useRouter } from "next/navigation";
 import { saveStepAnswers, runWebsiteAnalysis } from "@/lib/onboarding/actions";
 import { getPreviousStepUrl } from "@/lib/onboarding/steps";
+import StepNavigation from "@/components/onboarding/StepNavigation";
+import ChoiceCard from "@/components/onboarding/ChoiceCard";
 import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
 import { analyzeWebsiteForStep } from "@/lib/onboarding/website-step-flow";
 
@@ -21,8 +22,6 @@ export default function WebsiteStep({
   existingWebsiteUrl,
 }: WebsiteStepProps) {
   const router = useRouter();
-  const pathname = usePathname();
-  const isPreview = pathname === "/onboarding/preview";
   const [isPending, startTransition] = useTransition();
 
   const [hasWebsite, setHasWebsite] = useState<boolean | null>(
@@ -86,123 +85,95 @@ export default function WebsiteStep({
   const urlPrefilled = existingWebsiteUrl && websiteUrl === existingWebsiteUrl;
 
   return (
-    <div className="max-w-2xl mx-auto py-10 px-6 space-y-8">
-      <div className="space-y-3 text-center">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Connect your website
-        </h1>
-        <p className="text-slate-400 text-lg">
-          If you connect your site, Architecta can auto-build most of your Brand Kit.
-        </p>
-      </div>
-
+    <div className="space-y-6">
       {hasExistingContext && existingWebsiteUrl && (
-        <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4">
-          <p className="text-sm text-indigo-300">
-            We found your website from your Entrepreneuria profile. Architecta will analyze it to learn about your brand.
-          </p>
+        <div className="bp-notice">
+          We found your website from your Entrepreneuria profile. Architecta will analyze it to learn about your brand.
         </div>
       )}
 
-      <div className="space-y-3" role="radiogroup" aria-label="Do you have a website?" aria-required="true">
-        <button
-          role="radio"
-          aria-checked={hasWebsite === true}
-          className={`w-full rounded-xl border p-4 text-left transition ${
-            hasWebsite === true ? "border-indigo-500 bg-indigo-500/10" : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
-          }`}
-          onClick={() => setHasWebsite(true)}
-        >
-          <span className="font-medium text-white">I have a website</span>
-        </button>
-        <button
-          role="radio"
-          aria-checked={hasWebsite === false}
-          className={`w-full rounded-xl border p-4 text-left transition ${
-            hasWebsite === false ? "border-indigo-500 bg-indigo-500/10" : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
-          }`}
-          onClick={() => setHasWebsite(false)}
-        >
-          <span className="font-medium text-white">I don&apos;t have a website yet</span>
-        </button>
+      <div
+        className="space-y-2.5"
+        role="radiogroup"
+        aria-label="Do you have a website?"
+        aria-required="true"
+      >
+        <ChoiceCard
+          title="I have a website"
+          selected={hasWebsite === true}
+          onSelect={() => setHasWebsite(true)}
+          tabStop={hasWebsite !== false}
+        />
+        <ChoiceCard
+          title="I don’t have a website yet"
+          selected={hasWebsite === false}
+          onSelect={() => setHasWebsite(false)}
+          tabStop={hasWebsite === false}
+        />
       </div>
 
       {hasWebsite === true && (
         <div className="space-y-2">
-          <label className="text-sm text-slate-300">Website URL</label>
+          <label htmlFor="onb-website-url" className="bp-label">
+            Website URL
+          </label>
           <input
+            id="onb-website-url"
+            type="url"
+            inputMode="url"
+            autoComplete="url"
             value={websiteUrl}
             onChange={(e) => setWebsiteUrl(e.target.value)}
             placeholder="https://yourdomain.com"
-            className="w-full rounded-xl bg-slate-900 border border-slate-800 p-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+            aria-describedby="onb-website-url-hint"
+            className="bp-field"
           />
           {urlPrefilled && (
-            <p className="text-xs text-indigo-400">
+            <p className="bp-hint text-[#7fe6ff]">
               Pre-filled from your Entrepreneuria profile
             </p>
           )}
-          <p className="text-xs text-slate-500">
+          <p id="onb-website-url-hint" className="bp-hint">
             Architecta will analyze your homepage to extract brand and marketing context.
           </p>
         </div>
       )}
 
       {analysisStatus && (
-        <div className="flex items-center gap-3 text-slate-300">
-          <div className="h-5 w-5 rounded-full border-2 border-slate-700 border-t-indigo-500 animate-spin" />
+        <div className="flex items-center gap-3 text-[#d3e0ec]" role="status">
+          <div className="h-5 w-5 rounded-full border-2 border-slate-700 border-t-[#00d4ff] animate-spin motion-reduce:animate-none" />
           <span className="text-sm">{analysisStatus}</span>
         </div>
       )}
 
-      {error && <p className="text-red-400 text-sm" role="alert">{error}</p>}
+      {error && (
+        <p className="bp-error" role="alert">
+          {error}
+        </p>
+      )}
 
       {analysisFailed && hasWebsite === true && (
-        <Button
-          variant="outline"
-          size="lg"
-          className="w-full"
+        <button
+          type="button"
+          className="bp-btn bp-btn-secondary w-full"
           disabled={isPending || analyzing}
           onClick={saveAndContinue}
         >
           Continue without analysis
-        </Button>
+        </button>
       )}
 
-      <div className="flex gap-3">
-        {getPreviousStepUrl("website") && (
-          <Button
-            variant="outline"
-            size="lg"
-            className="flex-shrink-0"
-            disabled={isPending || analyzing}
-            onClick={() => {
-              const back = getPreviousStepUrl("website")!;
-              router.push(isPreview ? `/onboarding/preview?step=${back.replace("/onboarding/", "")}` : back);
-            }}
-          >
-            Back
-          </Button>
-        )}
-        <Button
-          size="lg"
-          className="w-full"
-          disabled={
-            isPending ||
-            analyzing ||
-            hasWebsite === null ||
-            (hasWebsite === true && !websiteUrl.trim())
-          }
-          onClick={handleAnalyzeAndContinue}
-        >
-          {analyzing
-            ? "Analyzing website…"
-            : isPending
-            ? "Saving…"
-            : hasWebsite
-            ? "Analyze & continue"
-            : "Continue"}
-        </Button>
-      </div>
+      <StepNavigation
+        backUrl={getPreviousStepUrl("website")}
+        isPending={isPending || analyzing}
+        isValid={
+          hasWebsite !== null &&
+          !(hasWebsite === true && !websiteUrl.trim())
+        }
+        onContinue={handleAnalyzeAndContinue}
+        continueLabel={hasWebsite ? "Analyze & continue" : "Continue"}
+        pendingLabel={analyzing ? "Analyzing website…" : "Saving…"}
+      />
     </div>
   );
 }

@@ -2,7 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion, type Variants } from "framer-motion";
+import {
+  AnimatePresence,
+  MotionConfig,
+  motion,
+  type Variants,
+} from "framer-motion";
 
 import "./blueprint.css";
 
@@ -110,22 +115,21 @@ export default function BlueprintOnboarding({ step, context }: Props) {
   };
 
   return (
-    <>
-      {/* Progress */}
-      <div className="progress-bar-wrapper">
-        <div
-          className="progress-bar"
-          style={{ width: `${progress}%` }}
-          aria-hidden
-        />
+    <div className="onboarding-container">
+      <div
+        className="progress-bar-wrapper"
+        role="progressbar"
+        aria-label="Onboarding progress"
+        aria-valuemin={1}
+        aria-valuemax={steps.length}
+        aria-valuenow={stepIndex + 1}
+        aria-valuetext={`Step ${stepIndex + 1} of ${steps.length}`}
+      >
+        <div className="progress-bar" style={{ width: `${progress}%` }} />
       </div>
 
-      <div className="onboarding-container">
-        <div className="header">
-          <h1>ARCHITECTA</h1>
-          <p>Building Your Brand System</p>
-        </div>
-
+      {/* "user" skips transform animations when prefers-reduced-motion is set */}
+      <MotionConfig reducedMotion="user">
         <AnimatePresence mode="wait" custom={direction}>
           <motion.div
             key={currentStep.id}
@@ -146,7 +150,7 @@ export default function BlueprintOnboarding({ step, context }: Props) {
             />
           </motion.div>
         </AnimatePresence>
-      </div>
-    </>
+      </MotionConfig>
+    </div>
   );
 }

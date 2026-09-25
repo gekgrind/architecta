@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveStepAnswers } from "@/lib/onboarding/actions";
 import StepNavigation from "@/components/onboarding/StepNavigation";
+import ChoiceCard from "@/components/onboarding/ChoiceCard";
 import { getPreviousStepUrl } from "@/lib/onboarding/steps";
 
 type SourceOption =
@@ -73,36 +74,29 @@ export default function SourceStep() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-3" role="radiogroup" aria-label="Where are you starting from?" aria-required="true">
-        {OPTIONS.map((option) => {
-          const isActive = selected === option.id;
-
-          return (
-            <button
-              key={option.id}
-              type="button"
-              role="radio"
-              aria-checked={isActive}
-              onClick={() => setSelected(option.id)}
-              className={`w-full rounded-xl border p-4 text-left transition
-                ${
-                  isActive
-                    ? "border-indigo-500 bg-indigo-500/10"
-                    : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
-                }`}
-            >
-              <div className="font-medium text-white">
-                {option.title}
-              </div>
-              <div className="text-sm text-slate-400">
-                {option.description}
-              </div>
-            </button>
-          );
-        })}
+      <div
+        className="space-y-2.5"
+        role="radiogroup"
+        aria-label="Where are you starting from?"
+        aria-required="true"
+      >
+        {OPTIONS.map((option, i) => (
+          <ChoiceCard
+            key={option.id}
+            title={option.title}
+            description={option.description}
+            selected={selected === option.id}
+            onSelect={() => setSelected(option.id)}
+            tabStop={selected === option.id || (!selected && i === 0)}
+          />
+        ))}
       </div>
 
-      {error && <p className="text-red-400 text-sm" role="alert">{error}</p>}
+      {error && (
+        <p className="bp-error" role="alert">
+          {error}
+        </p>
+      )}
 
       <StepNavigation
         backUrl={getPreviousStepUrl("source")}

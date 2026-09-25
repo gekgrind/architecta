@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AnimatePresence, motion, type Variants } from "framer-motion";
+import { AnimatePresence, MotionConfig, motion, type Variants } from "framer-motion";
 
 import "@/components/onboarding/blueprint.css";
 
@@ -250,47 +250,52 @@ export default function PreviewShell({ initialStep }: Props) {
 
       {/* ------------------------------------------------------------------ */}
       {/* REAL ONBOARDING CONTENT                                             */}
-      {/* Identical markup to BlueprintOnboarding.                           */}
+      {/* Mirrors app/onboarding/layout.tsx + BlueprintOnboarding markup.   */}
       {/* ------------------------------------------------------------------ */}
-      <div className="progress-bar-wrapper">
-        <div
-          className="progress-bar"
-          style={{ width: `${progress}%` }}
-          aria-hidden
-        />
-      </div>
+      <main className="flex-1 flex items-start sm:items-center justify-center px-4 sm:px-6 pt-4 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:py-12">
+        <div className="w-full max-w-2xl">
+          <div className="onboarding-container">
+            <div
+              className="progress-bar-wrapper"
+              role="progressbar"
+              aria-label="Onboarding progress"
+              aria-valuemin={1}
+              aria-valuemax={ONBOARDING_STEPS.length}
+              aria-valuenow={stepIndex + 1}
+              aria-valuetext={`Step ${stepIndex + 1} of ${ONBOARDING_STEPS.length}`}
+            >
+              <div className="progress-bar" style={{ width: `${progress}%` }} />
+            </div>
 
-      <div className="onboarding-container">
-        <div className="header">
-          <h1>ARCHITECTA</h1>
-          <p>Building Your Brand System</p>
+            <MotionConfig reducedMotion="user">
+              <AnimatePresence mode="wait" custom={direction}>
+                <motion.div
+                  key={currentStep.id}
+                  custom={direction}
+                  variants={variants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                >
+                  <BlueprintCard
+                    step={currentStep}
+                    context={PREVIEW_CONTEXT}
+                    isFirst={stepIndex === 0}
+                    isLast={stepIndex === ONBOARDING_STEPS.length - 1}
+                    onBack={goBack}
+                    onForwardStart={goForward}
+                    renderStep={
+                      currentStep.type === "finish"
+                        ? () => <PreviewFinishStep />
+                        : undefined
+                    }
+                  />
+                </motion.div>
+              </AnimatePresence>
+            </MotionConfig>
+          </div>
         </div>
-
-        <AnimatePresence mode="wait" custom={direction}>
-          <motion.div
-            key={currentStep.id}
-            custom={direction}
-            variants={variants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-          >
-            <BlueprintCard
-              step={currentStep}
-              context={PREVIEW_CONTEXT}
-              isFirst={stepIndex === 0}
-              isLast={stepIndex === ONBOARDING_STEPS.length - 1}
-              onBack={goBack}
-              onForwardStart={goForward}
-              renderStep={
-                currentStep.type === "finish"
-                  ? () => <PreviewFinishStep />
-                  : undefined
-              }
-            />
-          </motion.div>
-        </AnimatePresence>
-      </div>
+      </main>
     </div>
   );
 }

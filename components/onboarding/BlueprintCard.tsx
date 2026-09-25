@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import StepRenderer, { type OnboardingContext } from "./steps/StepRenderer";
+import StepNavigation from "./StepNavigation";
 import type { OnboardingStep } from "@/lib/onboarding/types";
 
 type Props = {
@@ -10,7 +11,7 @@ type Props = {
   isFirst: boolean;
   isLast: boolean;
   onBack?: () => void;
-  onForwardStart?: () => void;
+  onForwardStart?: () => void | Promise<void>;
   renderStep?: (step: OnboardingStep, context: OnboardingContext) => React.ReactNode;
   error?: string | null;
 };
@@ -18,13 +19,12 @@ type Props = {
 export default function BlueprintCard({
   step,
   context,
-  isFirst,
-  onBack,
   onForwardStart,
   renderStep,
   error,
 }: Props) {
   const [active, setActive] = useState(false);
+  const [advancing, setAdvancing] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setActive(true), 40);
@@ -32,6 +32,18 @@ export default function BlueprintCard({
   }, [step.id]);
 
   const isWelcome = step.type === "welcome";
+
+  // Disable Continue while the step-advance request is in flight so repeated
+  // clicks can't fire concurrent updates.
+  const handleForward = async () => {
+    if (advancing) return;
+    setAdvancing(true);
+    try {
+      await onForwardStart?.();
+    } finally {
+      setAdvancing(false);
+    }
+  };
 
   return (
     <div className={`blueprint-card ${active ? "active" : ""}`}>
@@ -44,12 +56,6 @@ export default function BlueprintCard({
           <div className="construction-line vertical construction-line-5" />
         </div>
 
-        <div className="dimension-marker dimension-top">REF {step.number}</div>
-        <div className="dimension-marker dimension-right">SCALE 1:1</div>
-
-        <div className="tech-annotation annotation-1">PRIMARY INPUT</div>
-        <div className="tech-annotation annotation-2">USER RESPONSE</div>
-
         <div className="crosshair crosshair-tl" />
         <div className="crosshair crosshair-br" />
 
@@ -60,41 +66,35 @@ export default function BlueprintCard({
 
         <div className="blueprint-light light-1" />
         <div className="blueprint-light light-2" />
-
-        <div className="card-stamp">
-          REV. {step.number}
-          <br />
-          ARCHITECTA
-        </div>
       </div>
 
       <div className="card-content">
-        <div className="card-number">STEP {step.number}</div>
+        <header className="card-meta">
+          <div className="card-meta-step">
+            <span className="card-meta-index">STEP {step.number}</span>
+            <span className="card-meta-name">{step.label}</span>
+          </div>
+          <span className="card-meta-mark">ARCHITECTA</span>
+        </header>
 
-        <h2 className="question">{step.title}</h2>
-        {step.subtitle && <p className="subhead">{step.subtitle}</p>}
+        <div className="question-block">
+          <h1 className="question">{step.title}</h1>
+          {step.subtitle && <p className="subhead">{step.subtitle}</p>}
+        </div>
 
         {renderStep ? renderStep(step, context) : <StepRenderer step={step} context={context} />}
 
         {error && (
-          <p className="text-red-400 text-sm mt-4" role="alert">{error}</p>
+          <p className="bp-error mt-4" role="alert">{error}</p>
         )}
 
         {isWelcome && (
-          <div className="button-group">
-            {!isFirst && onBack && (
-              <button type="button" className="btn" onClick={onBack}>
-                Back
-              </button>
-            )}
-
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => onForwardStart?.()}
-            >
-              Continue
-            </button>
+          <div className="mt-8">
+            <StepNavigation
+              backUrl={null}
+              isPending={advancing}
+              onContinue={handleForward}
+            />
           </div>
         )}
       </div>

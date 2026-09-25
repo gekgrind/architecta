@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveStepAnswers } from "@/lib/onboarding/actions";
 import StepNavigation from "@/components/onboarding/StepNavigation";
+import ChoiceCard from "@/components/onboarding/ChoiceCard";
 import { getPreviousStepUrl } from "@/lib/onboarding/steps";
 import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
 
@@ -68,82 +69,64 @@ export default function VisualsStep({ answers }: VisualsStepProps) {
   }
 
   return (
-    <div className="space-y-10">
-      <div className="space-y-3 text-center">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Visual identity
-        </h1>
-        <p className="text-slate-400 text-lg">
-          This helps Architecta format content to match your brand.
-        </p>
-      </div>
-
+    <div className="space-y-8">
       <div className="space-y-4">
-        <label id="style-label" className="block text-sm font-medium text-slate-300">
+        <p id="onb-overall-visual-style" className="bp-label">
           Overall visual style <span className="text-cyan-500" aria-hidden="true">*</span>
-        </label>
+        </p>
 
-        <div className="grid gap-2" role="radiogroup" aria-labelledby="style-label" aria-required="true">
-          {STYLE_OPTIONS.map((option) => {
-            const active = style === option.id;
-
-            return (
-              <button
-                key={option.id}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => setStyle(option.id)}
-                className={`rounded-lg border px-4 py-3 text-left transition
-                  ${
-                    active
-                      ? "border-indigo-500 bg-indigo-500/10"
-                      : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
-                  }`}
-              >
-                <span className="text-sm text-white">
-                  {option.label}
-                </span>
-              </button>
-            );
-          })}
+        <div
+          className="grid gap-2"
+          role="radiogroup"
+          aria-labelledby="onb-overall-visual-style"
+          aria-required="true"
+        >
+          {STYLE_OPTIONS.map((option, i) => (
+            <ChoiceCard
+              key={option.id}
+              compact
+              title={option.label}
+              selected={style === option.id}
+              onSelect={() => setStyle(option.id)}
+              tabStop={style === option.id || (!style && i === 0)}
+            />
+          ))}
         </div>
       </div>
 
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-slate-300">
+        <label htmlFor="onb-primary-colors" className="bp-label">
           Primary colors (optional)
         </label>
         <input
+          id="onb-primary-colors"
           type="text"
           value={colors}
           onChange={(e) => setColors(e.target.value)}
           placeholder="Indigo, charcoal, white… or #4F46E5"
-          className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+          className="bp-field"
         />
-        <p className="text-sm text-slate-500">
+        <p className="bp-hint">
           Comma-separated. Hex codes welcome.
         </p>
       </div>
 
-      <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3">
-        <span className="text-sm text-slate-300">
-          I already have a logo
-        </span>
-        <button
-          type="button"
-          onClick={() => setHasLogo((v) => !v)}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition
-            ${hasLogo ? "bg-indigo-500" : "bg-slate-700"}`}
-        >
-          <span
-            className={`inline-block h-4 w-4 transform rounded-full bg-white transition
-              ${hasLogo ? "translate-x-6" : "translate-x-1"}`}
-          />
-        </button>
-      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={hasLogo}
+        onClick={() => setHasLogo((v) => !v)}
+        className="bp-toggle-row"
+      >
+        <span>I already have a logo</span>
+        <span className="bp-switch" aria-hidden />
+      </button>
 
-      {error && <p className="text-red-400 text-sm" role="alert">{error}</p>}
+      {error && (
+        <p className="bp-error" role="alert">
+          {error}
+        </p>
+      )}
 
       <StepNavigation
         backUrl={getPreviousStepUrl("visuals")}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { Button } from "@/components/ui/button";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 
 function toPreviewUrl(backUrl: string): string {
   const stepId = backUrl.replace("/onboarding/", "");
@@ -34,31 +34,33 @@ export default function StepNavigation({
   const showHint = !isValid && !isPending && !!disabledHint;
 
   return (
-    <div className="sticky bottom-0 z-10 -mx-4 px-4 pb-[env(safe-area-inset-bottom,0px)] pt-3 md:static md:mx-0 md:px-0 md:pb-0 md:pt-0 bg-[#0a1628]/95 backdrop-blur-sm md:bg-transparent md:backdrop-blur-none space-y-2">
-      <div className="flex gap-3">
+    <div className="bp-nav-dock">
+      <div className="bp-nav">
         {resolvedBackUrl && (
-          <Button
-            variant="outline"
-            size="lg"
-            className="flex-shrink-0"
+          <button
+            type="button"
+            className="bp-btn bp-btn-secondary"
             disabled={isPending}
             onClick={() => router.push(resolvedBackUrl)}
           >
+            <ArrowLeft size={16} aria-hidden />
             Back
-          </Button>
+          </button>
         )}
-        <Button
-          size="lg"
-          className="w-full"
+        <button
+          type="button"
+          className="bp-btn bp-btn-primary"
           disabled={!isValid || isPending}
-          onClick={onContinue}
+          aria-busy={isPending || undefined}
           aria-describedby={showHint ? "step-nav-hint" : undefined}
+          onClick={onContinue}
         >
           {isPending ? pendingLabel : continueLabel}
-        </Button>
+          {!isPending && <ArrowRight size={16} aria-hidden />}
+        </button>
       </div>
       {showHint && (
-        <p id="step-nav-hint" className="text-sm text-slate-400 text-center">
+        <p id="step-nav-hint" className="bp-hint text-center">
           {disabledHint}
         </p>
       )}
