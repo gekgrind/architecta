@@ -105,13 +105,14 @@ export default function VoiceStep({ answers }: VoiceStepProps) {
           aria-labelledby="onb-overall-tone"
           aria-required="true"
         >
-          {TONE_OPTIONS.map((option) => (
+          {TONE_OPTIONS.map((option, i) => (
             <ChoiceCard
               key={option.id}
               compact
               title={option.label}
               selected={tone === option.id}
               onSelect={() => setTone(option.id)}
+              tabStop={tone === option.id || (!tone && i === 0)}
             />
           ))}
         </div>

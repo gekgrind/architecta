@@ -80,13 +80,14 @@ export default function SourceStep() {
         aria-label="Where are you starting from?"
         aria-required="true"
       >
-        {OPTIONS.map((option) => (
+        {OPTIONS.map((option, i) => (
           <ChoiceCard
             key={option.id}
             title={option.title}
             description={option.description}
             selected={selected === option.id}
             onSelect={() => setSelected(option.id)}
+            tabStop={selected === option.id || (!selected && i === 0)}
           />
         ))}
       </div>

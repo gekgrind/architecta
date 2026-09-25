@@ -11,7 +11,7 @@ type Props = {
   isFirst: boolean;
   isLast: boolean;
   onBack?: () => void;
-  onForwardStart?: () => void;
+  onForwardStart?: () => void | Promise<void>;
   renderStep?: (step: OnboardingStep, context: OnboardingContext) => React.ReactNode;
   error?: string | null;
 };
@@ -24,6 +24,7 @@ export default function BlueprintCard({
   error,
 }: Props) {
   const [active, setActive] = useState(false);
+  const [advancing, setAdvancing] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setActive(true), 40);
@@ -31,6 +32,18 @@ export default function BlueprintCard({
   }, [step.id]);
 
   const isWelcome = step.type === "welcome";
+
+  // Disable Continue while the step-advance request is in flight so repeated
+  // clicks can't fire concurrent updates.
+  const handleForward = async () => {
+    if (advancing) return;
+    setAdvancing(true);
+    try {
+      await onForwardStart?.();
+    } finally {
+      setAdvancing(false);
+    }
+  };
 
   return (
     <div className={`blueprint-card ${active ? "active" : ""}`}>
@@ -79,8 +92,8 @@ export default function BlueprintCard({
           <div className="mt-8">
             <StepNavigation
               backUrl={null}
-              isPending={false}
-              onContinue={() => onForwardStart?.()}
+              isPending={advancing}
+              onContinue={handleForward}
             />
           </div>
         )}

@@ -81,13 +81,14 @@ export default function VisualsStep({ answers }: VisualsStepProps) {
           aria-labelledby="onb-overall-visual-style"
           aria-required="true"
         >
-          {STYLE_OPTIONS.map((option) => (
+          {STYLE_OPTIONS.map((option, i) => (
             <ChoiceCard
               key={option.id}
               compact
               title={option.label}
               selected={style === option.id}
               onSelect={() => setStyle(option.id)}
+              tabStop={style === option.id || (!style && i === 0)}
             />
           ))}
         </div>

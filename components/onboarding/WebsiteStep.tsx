@@ -102,11 +102,13 @@ export default function WebsiteStep({
           title="I have a website"
           selected={hasWebsite === true}
           onSelect={() => setHasWebsite(true)}
+          tabStop={hasWebsite !== false}
         />
         <ChoiceCard
           title="I don’t have a website yet"
           selected={hasWebsite === false}
           onSelect={() => setHasWebsite(false)}
+          tabStop={hasWebsite === false}
         />
       </div>
 
