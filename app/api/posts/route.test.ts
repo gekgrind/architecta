@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   getAuthenticatedUser: vi.fn(),
   createSupabaseServerClient: vi.fn(),
-  enforceRateLimit: vi.fn(),
+  enforceAiUsage: vi.fn(),
   runGateway: vi.fn(),
   parsePostResponse: vi.fn(),
   buildPostUserPrompt: vi.fn(() => "PROMPT"),
@@ -22,7 +22,7 @@ vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: h.createSupabaseServerClient,
 }));
 vi.mock("@/lib/ratelimit", () => ({
-  enforceRateLimit: h.enforceRateLimit,
+  enforceAiUsage: h.enforceAiUsage,
   RATE_LIMITS: { postGenerate: { action: "posts.generate", limit: 20, windowSeconds: 60 } },
 }));
 vi.mock("@/lib/ai/llm/run", () => ({ runGateway: h.runGateway }));
@@ -101,7 +101,7 @@ function jsonReq(body: unknown) {
 beforeEach(() => {
   Object.values(h).forEach((m) => "mockReset" in m && m.mockReset());
   h.buildPostUserPrompt.mockReturnValue("PROMPT");
-  h.enforceRateLimit.mockResolvedValue(null); // allowed by default
+  h.enforceAiUsage.mockResolvedValue(null); // allowed by default
 });
 
 describe("GET /api/posts", () => {
@@ -182,7 +182,7 @@ describe("POST /api/posts", () => {
   it("returns 429 when rate limited (before any generation)", async () => {
     h.createSupabaseServerClient.mockResolvedValue({});
     h.getAuthenticatedUser.mockResolvedValue({ user: { id: USER_ID } });
-    h.enforceRateLimit.mockResolvedValue(
+    h.enforceAiUsage.mockResolvedValue(
       new Response(JSON.stringify({ ok: false }), { status: 429 })
     );
 

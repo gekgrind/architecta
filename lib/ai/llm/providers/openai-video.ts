@@ -1,5 +1,7 @@
 import "server-only";
 
+import { isAllowedVideoModel, isPaidAiDisabled } from "../policy";
+
 export class VideoNotAvailableError extends Error {
   status: number;
   raw: unknown;
@@ -48,6 +50,12 @@ const SORA_ENDPOINT = "https://api.openai.com/v1/videos";
 export async function generateVideo(
   input: GenerateVideoInput
 ): Promise<GenerateVideoResult> {
+  // Checked before anything else: test mode must never reach Sora. The route
+  // treats this like any unavailable video provider (storyboard fallback).
+  if (isPaidAiDisabled()) {
+    throw new VideoNotAvailableError("Video generation is disabled in AI test mode", 503, null);
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
 
@@ -60,6 +68,9 @@ export async function generateVideo(
   }
 
   const model = input.model || "sora-2";
+  if (!isAllowedVideoModel(model)) {
+    throw new VideoNotAvailableError("Unsupported video model", 400, null);
+  }
   const durationSeconds = input.durationSeconds ?? 8;
   const started = Date.now();
 

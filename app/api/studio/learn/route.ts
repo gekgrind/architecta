@@ -1,7 +1,8 @@
-import OpenAI from "openai";
 import { aggregateMemory } from "@/lib/ai/memoryAggregator";
+import { runGateway } from "@/lib/ai/llm/run";
 import { apiError, apiOk, parseJsonBody } from "@/lib/api/response";
 import { getAuthenticatedUser } from "@/lib/auth/server";
+import { enforceAiUsage, RATE_LIMITS } from "@/lib/ratelimit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -51,9 +52,9 @@ export async function POST(req: Request) {
 
     if (existingError) return apiError("server_error", existingError.message);
 
-    const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY!,
-    });
+    // Only count against AI limits once there is something to learn from.
+    const limited = await enforceAiUsage(session.user.id, RATE_LIMITS.studioLearn);
+    if (limited) return limited;
 
     const prompt = `
 You maintain a Founder Style Profile.
@@ -74,14 +75,19 @@ Rules:
 Return ONLY the updated profile text.
 `.trim();
 
-    const res = await client.chat.completions.create({
-      model: "gpt-4.1-mini",
+    // Provider, model and token cap are chosen server-side by the gateway.
+    const res = await runGateway({
+      userId: session.user.id,
+      workspaceId,
+      task: "BRAND_VOICE",
+      tier: "draft",
+      systemPrompt: prompt,
+      prompt: "Return the updated Founder Style Profile now.",
       temperature: 0.3,
-      messages: [{ role: "system", content: prompt }],
+      metadata: { source: "studio_learn" },
     });
 
-    const updatedProfile =
-      res.choices[0]?.message?.content?.trim() ?? existing?.profile_text;
+    const updatedProfile = res.text.trim() || existing?.profile_text;
 
     const updated = Boolean(updatedProfile && updatedProfile !== existing?.profile_text);
 
