@@ -12,10 +12,14 @@ const h = vi.hoisted(() => ({
   getOrCreateArchitectaOnboarding: vi.fn(),
   updateOnboardingStep: vi.fn(),
   saveOnboardingProgress: vi.fn(),
+  rateLimitRpc: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: h.createSupabaseServerClient,
+}));
+vi.mock("@/lib/supabase/service", () => ({
+  createSupabaseServiceClient: vi.fn(async () => ({ rpc: h.rateLimitRpc })),
 }));
 vi.mock("@/lib/ai/llm/usage/logger", () => ({ logLlmCall: h.logLlmCall }));
 vi.mock("./server", () => ({
@@ -115,6 +119,10 @@ beforeEach(() => {
   mockSupabase();
   h.getOrCreateArchitectaOnboarding.mockResolvedValue({ session: { id: "sess-1" } });
   h.saveOnboardingProgress.mockResolvedValue({ ok: true });
+  h.rateLimitRpc.mockResolvedValue({
+    data: [{ allowed: true, remaining: 4, reset_at: null }],
+    error: null,
+  });
 });
 
 afterEach(() => {
@@ -534,6 +542,48 @@ describe("runWebsiteAnalysis — NVIDIA failure", () => {
 
     expect(result).toEqual({ ok: false, error: "Not authenticated" });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+/* =======================================================
+   AI rate limit + daily budget
+======================================================= */
+
+describe("analyzeWebsite — AI usage limits", () => {
+  it("checks the per-user website-analysis limit and daily budget before the model", async () => {
+    nvidiaReply = () => nvidiaContent('{"brand_name": "Acme"}');
+
+    await analyzeWebsite(USER_ID, SITE_URL);
+
+    const keys = h.rateLimitRpc.mock.calls.map(([, args]) => args.p_key);
+    expect(keys[0]).toBe(`onboarding.website_analysis:${USER_ID}`);
+    expect(keys[1]).toMatch(new RegExp(`^ai\\.daily\\.\\d{4}-\\d{2}-\\d{2}:${USER_ID}$`));
+  });
+
+  it("returns a rate-limit message and never calls NVIDIA when the limit is hit", async () => {
+    h.rateLimitRpc.mockResolvedValue({
+      data: [{ allowed: false, remaining: 0, reset_at: null }],
+      error: null,
+    });
+
+    const result = await analyzeWebsite(USER_ID, SITE_URL);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/too quickly/i);
+    expect(nvidiaCalls()).toHaveLength(0);
+  });
+
+  it("fails closed when the limiter itself errors", async () => {
+    h.rateLimitRpc.mockResolvedValue({ data: null, error: { message: "db down" } });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = await analyzeWebsite(USER_ID, SITE_URL);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/temporarily unavailable/i);
+    expect(nvidiaCalls()).toHaveLength(0);
   });
 });
 

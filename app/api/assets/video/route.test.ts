@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   getAuthenticatedUser: vi.fn(),
   createSupabaseServerClient: vi.fn(),
-  enforceRateLimit: vi.fn(),
+  enforceAiUsage: vi.fn(),
   generateVideo: vi.fn(),
   getUserAiPreference: vi.fn(),
   runGateway: vi.fn(),
@@ -15,7 +15,7 @@ vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: h.createSupabaseServerClient,
 }));
 vi.mock("@/lib/ratelimit", () => ({
-  enforceRateLimit: h.enforceRateLimit,
+  enforceAiUsage: h.enforceAiUsage,
   RATE_LIMITS: { videoGenerate: { action: "assets.video", limit: 5, windowSeconds: 60 } },
 }));
 vi.mock("@/lib/ai/llm/preferences", () => ({ getUserAiPreference: h.getUserAiPreference }));
@@ -91,7 +91,7 @@ function req(body: unknown) {
 
 beforeEach(() => {
   Object.values(h).forEach((m) => "mockReset" in m && m.mockReset());
-  h.enforceRateLimit.mockResolvedValue(null);
+  h.enforceAiUsage.mockResolvedValue(null);
   h.getUserAiPreference.mockResolvedValue({ openaiVideoModel: null });
 });
 
@@ -105,7 +105,7 @@ describe("POST /api/assets/video", () => {
   it("429 when rate limited, before generation", async () => {
     h.createSupabaseServerClient.mockResolvedValue({});
     h.getAuthenticatedUser.mockResolvedValue({ user: { id: USER_ID } });
-    h.enforceRateLimit.mockResolvedValue(new Response("{}", { status: 429 }));
+    h.enforceAiUsage.mockResolvedValue(new Response("{}", { status: 429 }));
     const res = await POST(req({ prompt: "a clip" }));
     expect(res.status).toBe(429);
     expect(h.generateVideo).not.toHaveBeenCalled();
