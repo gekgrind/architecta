@@ -6,6 +6,26 @@ export function getPreviousStepUrl(currentStepId: string): string | null {
   return `/onboarding/${ONBOARDING_STEPS[idx - 1].id}`;
 }
 
+/** Position of a step in the flow, or -1 for an unknown/missing step id. */
+export function getStepIndex(stepId: string | null | undefined): number {
+  if (!stepId) return -1;
+  return ONBOARDING_STEPS.findIndex((s) => s.id === stepId);
+}
+
+/**
+ * The later of two steps in flow order. Used so the persisted
+ * `current_step` only ever moves forward — revisiting and re-saving an
+ * earlier step must not forget how far the user had already reached.
+ */
+export function getFurthestStep(
+  persisted: string | null | undefined,
+  candidate: OnboardingStepId
+): OnboardingStepId {
+  return getStepIndex(persisted) > getStepIndex(candidate)
+    ? (persisted as OnboardingStepId)
+    : candidate;
+}
+
 export type OnboardingStepId =
   | "welcome"
   | "source"

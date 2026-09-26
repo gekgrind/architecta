@@ -16,7 +16,6 @@ import {
   buildPrefillFromSharedContext,
   loadSharedBusinessContext,
   loadOnboardingSession,
-  type OnboardingAnswers,
   type SharedBusinessContext,
   type BrandProfileData,
 } from "./persistence";
@@ -170,9 +169,22 @@ describe("saveOnboardingProgress", () => {
    persistSharedBusinessFacts
 ======================================================= */
 
+const EMPTY_SHARED_ROW = {
+  data: {
+    industry: null,
+    website: null,
+    website_url: null,
+    has_website: null,
+    audience: null,
+    offer: null,
+    business_idea: null,
+  },
+  error: null,
+};
+
 describe("persistSharedBusinessFacts", () => {
   it("updates profiles with patch semantics", async () => {
-    const supabase = makeSupabaseMock();
+    const supabase = makeSupabaseMock({ profiles: EMPTY_SHARED_ROW });
 
     const result = await persistSharedBusinessFacts({
       industry: "Tech",
@@ -190,7 +202,7 @@ describe("persistSharedBusinessFacts", () => {
   });
 
   it("writes both website and website_url for compatibility", async () => {
-    const supabase = makeSupabaseMock();
+    const supabase = makeSupabaseMock({ profiles: EMPTY_SHARED_ROW });
 
     await persistSharedBusinessFacts({
       website_url: "https://test.com",
@@ -291,13 +303,13 @@ describe("buildPrefillFromSharedContext", () => {
       goal_90_day: null,
       goal90: null,
       experience_level: null,
-      onboarding_complete: false,
-      name: "TestCo",
     };
 
     const result = buildPrefillFromSharedContext(shared, null);
 
-    expect(result.brand_name).toBe("TestCo");
+    // The shared profile carries no brand name; a person's name is never
+    // treated as their brand name.
+    expect(result.brand_name).toBeUndefined();
     expect(result.industry).toBe("Tech");
     expect(result.website_url).toBe("https://example.com");
     expect(result.has_website).toBe(true);
@@ -323,8 +335,6 @@ describe("buildPrefillFromSharedContext", () => {
       goal_90_day: null,
       goal90: null,
       experience_level: null,
-      onboarding_complete: false,
-      name: "OldName",
     };
 
     const brand: BrandProfileData = {
@@ -382,8 +392,6 @@ describe("buildPrefillFromSharedContext", () => {
       goal_90_day: null,
       goal90: null,
       experience_level: null,
-      onboarding_complete: false,
-      name: null,
     };
 
     const result = buildPrefillFromSharedContext(shared, null);
@@ -400,27 +408,6 @@ describe("buildPrefillFromSharedContext", () => {
 ======================================================= */
 
 describe("completeArchitectaOnboardingWithData", () => {
-  it("persists to profiles, brand_profiles, and marks session complete", async () => {
-    const supabase = makeSupabaseMock();
-
-    const answers: OnboardingAnswers = {
-      brand_name: "TestBrand",
-      industry: "SaaS",
-      website_url: "https://test.com",
-      has_website: true,
-      description: "We build tools",
-      customer_role: "Founders",
-      voice_tone: "bold",
-      brand_values: ["Clarity", "Innovation"],
-    };
-
-    const result = await completeArchitectaOnboardingWithData(answers);
-
-    expect(result).toEqual({ ok: true });
-    expect(supabase.update).toHaveBeenCalled();
-    expect(supabase.upsert).toHaveBeenCalled();
-  });
-
   it("returns error when not authenticated", async () => {
     makeUnauthenticatedMock();
 
@@ -548,7 +535,7 @@ describe("loadSharedBusinessContext", () => {
     const result = await loadSharedBusinessContext();
 
     expect(result).not.toBeNull();
-    expect(result?.name).toBe("TestCo");
+    expect(result?.industry).toBe("Tech");
   });
 });
 

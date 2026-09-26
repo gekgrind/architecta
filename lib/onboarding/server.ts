@@ -1,37 +1,40 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { OnboardingStepId } from "./steps";
+import {
+  ARCHITECTA_ONBOARDING_APP,
+  ONBOARDING_SESSION_STATUS,
+  isArchitectaOnboardingComplete,
+} from "./gate";
+import { getFurthestStep, type OnboardingStepId } from "./steps";
 
 export type ArchitectaOnboardingStatus = {
   currentStep: OnboardingStepId;
   completedSteps: OnboardingStepId[];
+  /** Derived from the Architecta onboarding session — never profiles.onboarding_complete. */
   onboardingComplete: boolean;
-  onboardingCompletedAt: string | null;
   answers: Record<string, unknown>;
 };
 
-async function getOrCreateProfileOnboardingState(userId: string) {
+/**
+ * Ensures the shared profiles row exists so shared business facts can be
+ * backfilled later. Never reads or writes the shared (Entrepreneuria)
+ * onboarding flags.
+ */
+async function ensureSharedProfileRow(userId: string) {
   const supabase = await createSupabaseServerClient();
   const { data: existing, error } = await supabase
     .from("profiles")
-    .select("id, onboarding_complete, onboarding_completed_at")
+    .select("id")
     .eq("id", userId)
     .maybeSingle();
 
   if (error) throw error;
-  if (existing) return existing;
+  if (existing) return;
 
-  const { data: inserted, error: insertError } = await supabase
+  const { error: insertError } = await supabase
     .from("profiles")
-    .insert({
-      id: userId,
-      onboarding_complete: false,
-    })
-    .select("id, onboarding_complete, onboarding_completed_at")
-    .single();
+    .insert({ id: userId });
 
   if (insertError) throw insertError;
-
-  return inserted;
 }
 
 /**
@@ -61,7 +64,7 @@ export async function getOrCreateArchitectaOnboarding() {
     .from("onboarding_sessions")
     .select("*")
     .eq("user_id", user.id)
-    .eq("app", "architecta")
+    .eq("app", ARCHITECTA_ONBOARDING_APP)
     .maybeSingle();
 
   if (sessionError) {
@@ -75,12 +78,12 @@ export async function getOrCreateArchitectaOnboarding() {
       .from("onboarding_sessions")
       .insert({
         user_id: user.id,
-        app: "architecta",
+        app: ARCHITECTA_ONBOARDING_APP,
         current_step: "welcome",
         completed_steps: [],
         flags: {},
         answers: {},
-        status: "in_progress",
+        status: ONBOARDING_SESSION_STATUS.inProgress,
       })
       .select("*")
       .single();
@@ -124,20 +127,18 @@ export async function getOrCreateArchitectaOnboarding() {
     profile = inserted;
   }
 
-  await getOrCreateProfileOnboardingState(user.id);
+  await ensureSharedProfileRow(user.id);
 
   return { user, session, profile };
 }
 
 export async function getArchitectaOnboardingStatus(): Promise<ArchitectaOnboardingStatus> {
-  const { user, session } = await getOrCreateArchitectaOnboarding();
-  const profileState = await getOrCreateProfileOnboardingState(user.id);
+  const { session } = await getOrCreateArchitectaOnboarding();
 
   return {
     currentStep: session.current_step ?? "welcome",
     completedSteps: Array.isArray(session.completed_steps) ? session.completed_steps : [],
-    onboardingComplete: Boolean(profileState.onboarding_complete),
-    onboardingCompletedAt: profileState.onboarding_completed_at,
+    onboardingComplete: isArchitectaOnboardingComplete(session),
     answers:
       session.answers && typeof session.answers === "object" && !Array.isArray(session.answers)
         ? session.answers
@@ -146,9 +147,10 @@ export async function getArchitectaOnboardingStatus(): Promise<ArchitectaOnboard
 }
 
 /**
- * Advance or explicitly set onboarding step
+ * Advance onboarding step
  * - Guarantees session exists
  * - Appends to completed_steps safely
+ * - Never moves current_step backwards (it records the furthest step reached)
  */
 export async function updateOnboardingStep(
   step: OnboardingStepId,
@@ -169,7 +171,7 @@ export async function updateOnboardingStep(
     .from("onboarding_sessions")
     .select("*")
     .eq("user_id", user.id)
-    .eq("app", "architecta")
+    .eq("app", ARCHITECTA_ONBOARDING_APP)
     .single();
 
   if (sessionError || !session) {
@@ -190,7 +192,7 @@ export async function updateOnboardingStep(
   const { error: updateError } = await supabase
     .from("onboarding_sessions")
     .update({
-      current_step: step,
+      current_step: getFurthestStep(session.current_step, step),
       completed_steps: nextCompleted,
     })
     .eq("id", session.id);
