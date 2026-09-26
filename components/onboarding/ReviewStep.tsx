@@ -84,6 +84,9 @@ export default function ReviewStep({
     answers.customer_role
   );
 
+  const wa = answers.website_analysis;
+  const hasWebsiteIntelligence = !!(wa?.offers || wa?.mission || wa?.differentiators?.length);
+
   return (
     <div className="space-y-8">
       {hasExistingContext && (
@@ -143,6 +146,14 @@ export default function ReviewStep({
             }
           />
         </ReviewSection>
+
+        {hasWebsiteIntelligence && (
+          <ReviewSection title="Website intelligence">
+            <ReviewItem label="Primary offers" value={wa?.offers} />
+            <ReviewItem label="Mission" value={wa?.mission} />
+            <ReviewItem label="Differentiators" value={wa?.differentiators} />
+          </ReviewSection>
+        )}
       </div>
 
       {error && <p className="text-red-400 text-sm" role="alert">{error}</p>}
