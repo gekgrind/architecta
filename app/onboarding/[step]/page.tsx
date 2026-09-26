@@ -1,8 +1,9 @@
 import { notFound, redirect } from "next/navigation";
-import { ONBOARDING_STEPS } from "@/lib/onboarding/steps";
+import { ONBOARDING_STEPS, type OnboardingStepId } from "@/lib/onboarding/steps";
 import BlueprintOnboarding from "@/components/onboarding/BlueprintOnboarding";
 import { getOrCreateArchitectaOnboarding } from "@/lib/onboarding/server";
 import { loadOnboardingContext } from "@/lib/onboarding/actions";
+import { resolveOnboardingStepAccess } from "@/lib/onboarding/gate";
 
 type Props = {
   params: Promise<{
@@ -21,8 +22,12 @@ export default async function OnboardingStepPage({ params }: Props) {
 
   const { session } = await getOrCreateArchitectaOnboarding();
 
-  if (session.current_step && session.current_step !== step) {
-    redirect(`/onboarding/${session.current_step}`);
+  // Earlier and current steps render (answers are preserved in the session);
+  // only jumping ahead of the furthest reached step is redirected.
+  const access = resolveOnboardingStepAccess(step as OnboardingStepId, session);
+
+  if (access.kind === "redirect") {
+    redirect(access.to);
   }
 
   const ctx = await loadOnboardingContext();

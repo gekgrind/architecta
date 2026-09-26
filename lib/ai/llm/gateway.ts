@@ -5,6 +5,15 @@ import type {
   LlmProvider,
   LlmResult,
 } from "./types";
+import {
+  AiGatewayError,
+  allowsFallback,
+  classifyLlmError,
+  errorStatus,
+  isRetryableCategory,
+  type LlmErrorCategory,
+} from "./errors";
+import { getAiTestProvider, isAllowedTextModel, resolveMaxTokens } from "./policy";
 import { buildRoutePlan } from "./router";
 import { logLlmCall } from "./usage/logger";
 
@@ -19,47 +28,48 @@ type GatewayDeps = {
   anthropic: LlmClient;
   nvidia: LlmClient;
   getUserPreference: UserPreferenceLookup;
+  /** Backoff before a same-provider retry; injectable for tests. */
+  sleep?: (ms: number) => Promise<void>;
 };
+
+/** Attempts on the primary step (1 call + 1 retry on transient failures). */
+export const MAX_PRIMARY_ATTEMPTS = 2;
+/** Attempts on each fallback step (no retries). */
+export const MAX_FALLBACK_ATTEMPTS = 1;
 
 function getClient(deps: GatewayDeps, provider: LlmProvider): LlmClient {
   if (provider === "nvidia") return deps.nvidia;
   return provider === "openai" ? deps.openai : deps.anthropic;
 }
 
-function getErrorStatus(err: unknown): number | undefined {
-  return typeof err === "object" && err !== null && "status" in err
-    ? Number((err as { status?: unknown }).status)
-    : undefined;
-}
-
-function getErrorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "LLM request failed";
-}
-
-function isRetryable(err: unknown): boolean {
-  const status = getErrorStatus(err);
-  if (!status) return true;
-  return status === 429 || (status >= 500 && status <= 599);
-}
-
-async function sleep(ms: number) {
+async function defaultSleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
 }
 
-async function attemptGenerate(args: {
-  deps: GatewayDeps;
+function logAttemptFailure(args: {
   input: LlmGenerateInput;
   provider: LlmProvider;
   model: string;
-}): Promise<LlmResult> {
-  const client = getClient(args.deps, args.provider);
-  return client.generate({
-    ...args.input,
+  attempt: number;
+  category: LlmErrorCategory;
+  status?: number;
+}) {
+  // Non-secret diagnostics only: no prompts, no provider response text.
+  console.warn("[llm] attempt failed", {
+    userId: args.input.userId,
+    task: args.input.task,
+    provider: args.provider,
     model: args.model,
+    attempt: args.attempt,
+    category: args.category,
+    status: args.status ?? null,
+    at: new Date().toISOString(),
   });
 }
 
 export function createLlmGateway(deps: GatewayDeps) {
+  const sleep = deps.sleep ?? defaultSleep;
+
   return {
     async generate(input: LlmGenerateInput): Promise<LlmResult> {
       const userId = input.userId;
@@ -67,48 +77,71 @@ export function createLlmGateway(deps: GatewayDeps) {
         throw new Error("LLM gateway requires userId in input");
       }
 
-      const pref = await deps.getUserPreference(userId);
+      const testProvider = getAiTestProvider();
+      if (testProvider === "invalid") {
+        console.error("[llm] AI_TEST_PROVIDER has an unsupported value; refusing AI calls");
+        throw new AiGatewayError("configuration");
+      }
+      const nvidiaOnly = testProvider === "nvidia";
+
+      // In NVIDIA-only mode stored preferences are irrelevant — skip the lookup.
+      const pref = nvidiaOnly ? null : await deps.getUserPreference(userId);
 
       const plan = buildRoutePlan({
         task: input.task,
         tier: input.tier,
         preference: input.preference,
-        workspacePreference: pref.preference,
+        workspacePreference: pref?.preference,
+        userModels: {
+          anthropic: pref?.anthropicModel,
+          openai: pref?.openaiTextModel,
+        },
+        nvidiaOnly,
       });
 
-      // Apply user model overrides when their pinned provider matches the step.
-      const applyOverride = (
-        step: { provider: LlmProvider; model: string }
-      ) => {
-        if (step.provider === "anthropic" && pref.anthropicModel) {
-          return { ...step, model: pref.anthropicModel };
-        }
-        if (step.provider === "openai" && pref.openaiTextModel) {
-          return { ...step, model: pref.openaiTextModel };
-        }
-        return step;
-      };
-
-      const routeReason = input.preference
+      const routeReason = nvidiaOnly
+        ? "test_provider:nvidia"
+        : input.preference
         ? `user_override:${input.preference}`
-        : `user_pref:${pref.preference}`;
+        : `user_pref:${pref?.preference ?? "auto"}`;
 
-      const chain = [plan.primary, ...plan.fallbacks].map(applyOverride);
+      const chain = [plan.primary, ...plan.fallbacks];
+
+      // Defense in depth: nothing outside the allowlist (or outside NVIDIA in
+      // test mode) is ever forwarded to a provider.
+      for (const step of chain) {
+        if (nvidiaOnly && step.provider !== "nvidia") {
+          throw new AiGatewayError("configuration");
+        }
+        if (!isAllowedTextModel(step.provider, step.model)) {
+          console.error("[llm] refusing non-allowlisted model", {
+            provider: step.provider,
+            model: step.model,
+          });
+          throw new AiGatewayError("configuration");
+        }
+      }
+
+      const maxTokens = resolveMaxTokens(input.task, input.maxTokens);
 
       let lastErr: unknown = null;
+      let lastCategory: LlmErrorCategory = "unknown";
+      let lastProvider: LlmProvider | undefined;
+      let attemptNumber = 0;
 
-      for (let i = 0; i < chain.length; i++) {
+      steps: for (let i = 0; i < chain.length; i++) {
         const step = chain[i];
         const isFallback = i > 0;
+        const maxAttempts = isFallback ? MAX_FALLBACK_ATTEMPTS : MAX_PRIMARY_ATTEMPTS;
 
-        for (let attempt = 1; attempt <= 2; attempt++) {
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          attemptNumber += 1;
           try {
             if (attempt > 1) await sleep(250 * attempt);
 
-            const result = await attemptGenerate({
-              deps,
-              input,
-              provider: step.provider,
+            const result = await getClient(deps, step.provider).generate({
+              ...input,
+              maxTokens,
               model: step.model,
             });
 
@@ -117,24 +150,34 @@ export function createLlmGateway(deps: GatewayDeps) {
               usedFallback: isFallback,
             };
 
-            await logLlmCall({ input, result: final, routeReason });
+            await logLlmCall({ input, result: final, routeReason, attempt: attemptNumber });
 
             return final;
           } catch (err: unknown) {
             lastErr = err;
-            if (!isRetryable(err) || attempt === 2) break;
+            lastCategory = classifyLlmError(err);
+            lastProvider = step.provider;
+            logAttemptFailure({
+              input,
+              provider: step.provider,
+              model: step.model,
+              attempt: attemptNumber,
+              category: lastCategory,
+              status: errorStatus(err),
+            });
+
+            if (isRetryableCategory(lastCategory) && attempt < maxAttempts) continue;
+            if (allowsFallback(lastCategory)) continue steps;
+            break steps;
           }
         }
       }
 
-      const e = Object.assign(new Error(getErrorMessage(lastErr)), {
-        raw:
-          typeof lastErr === "object" && lastErr !== null && "raw" in lastErr
-            ? (lastErr as { raw?: unknown }).raw
-            : undefined,
-        status: getErrorStatus(lastErr),
+      throw new AiGatewayError(lastCategory, {
+        status: errorStatus(lastErr),
+        provider: lastProvider,
+        cause: lastErr,
       });
-      throw e;
     },
   };
 }

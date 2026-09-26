@@ -1,7 +1,8 @@
 import "server-only";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { OnboardingStepId } from "./steps";
+import { ARCHITECTA_ONBOARDING_APP, ONBOARDING_SESSION_STATUS } from "./gate";
+import { getFurthestStep, type OnboardingStepId } from "./steps";
 
 /* =======================================================
    Types — Onboarding Answers (stored in onboarding_sessions.answers JSONB)
@@ -64,6 +65,10 @@ export type WebsiteAnalysisResult = {
 
 /* =======================================================
    Shared Business Context (profiles table)
+
+   Read-only ecosystem context. Architecta deliberately does not read the
+   shared onboarding flags (they describe Entrepreneuria onboarding) or the
+   personal `name` (a person's name is not their brand name).
 ======================================================= */
 
 export type SharedBusinessContext = {
@@ -83,8 +88,6 @@ export type SharedBusinessContext = {
   goal_90_day: string | null;
   goal90: string | null;
   experience_level: string | null;
-  onboarding_complete: boolean | null;
-  name: string | null;
 };
 
 export async function loadSharedBusinessContext(): Promise<SharedBusinessContext | null> {
@@ -98,7 +101,7 @@ export async function loadSharedBusinessContext(): Promise<SharedBusinessContext
   const { data, error } = await supabase
     .from("profiles")
     .select(
-      "id, email, full_name, industry, business_stage, stage, website, website_url, has_website, audience, offer, business_idea, business_focus, goal_90_day, goal90, experience_level, onboarding_complete, name"
+      "id, email, full_name, industry, business_stage, stage, website, website_url, has_website, audience, offer, business_idea, business_focus, goal_90_day, goal90, experience_level"
     )
     .eq("id", user.id)
     .maybeSingle();
@@ -180,7 +183,7 @@ export async function loadOnboardingSession(): Promise<OnboardingSessionData | n
     .from("onboarding_sessions")
     .select("*")
     .eq("user_id", user.id)
-    .eq("app", "architecta")
+    .eq("app", ARCHITECTA_ONBOARDING_APP)
     .maybeSingle();
 
   if (error || !data) return null;
@@ -217,7 +220,7 @@ export async function saveOnboardingProgress(
 
   const { data: session, error: fetchError } = await supabase
     .from("onboarding_sessions")
-    .select("id, answers, completed_steps")
+    .select("id, answers, completed_steps, current_step")
     .eq("id", sessionId)
     .eq("user_id", user.id)
     .single();
@@ -244,7 +247,8 @@ export async function saveOnboardingProgress(
     .from("onboarding_sessions")
     .update({
       answers: mergedAnswers,
-      current_step: step,
+      // Re-saving an earlier step (back navigation) must not rewind progress.
+      current_step: getFurthestStep(session.current_step, step),
       completed_steps: nextCompleted,
     })
     .eq("id", session.id);
@@ -258,7 +262,23 @@ export async function saveOnboardingProgress(
 
 /* =======================================================
    Persist Shared Business Facts (profiles)
+
+   Backfill only: a shared column is written only when it is currently
+   empty, so Architecta never overwrites what Entrepreneuria (or the user)
+   already recorded. Identity (`name`) and onboarding flags are never
+   written from here.
 ======================================================= */
+
+const SHARED_BUSINESS_FACT_COLUMNS =
+  "industry, website, website_url, has_website, audience, offer, business_idea";
+
+function isBlank(value: unknown): boolean {
+  return (
+    value === null ||
+    value === undefined ||
+    (typeof value === "string" && value.trim() === "")
+  );
+}
 
 export async function persistSharedBusinessFacts(
   facts: {
@@ -268,7 +288,6 @@ export async function persistSharedBusinessFacts(
     audience?: string;
     offer?: string;
     business_idea?: string;
-    name?: string;
   }
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createSupabaseServerClient();
@@ -278,18 +297,37 @@ export async function persistSharedBusinessFacts(
 
   if (!user) return { ok: false, error: "Not authenticated" };
 
+  const candidates: Record<string, unknown> = {
+    industry: facts.industry,
+    website_url: facts.website_url,
+    website: facts.website_url,
+    has_website: facts.has_website,
+    audience: facts.audience,
+    offer: facts.offer,
+    business_idea: facts.business_idea,
+  };
+
+  if (Object.values(candidates).every(isBlank)) return { ok: true };
+
+  const { data: current, error: readError } = await supabase
+    .from("profiles")
+    .select(SHARED_BUSINESS_FACT_COLUMNS)
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (readError) return { ok: false, error: readError.message };
+
+  // No shared row to backfill (an update would match nothing anyway).
+  if (!current) return { ok: true };
+
+  const existing = current as Record<string, unknown>;
   const patch: Record<string, unknown> = {};
 
-  if (facts.industry !== undefined) patch.industry = facts.industry;
-  if (facts.website_url !== undefined) {
-    patch.website_url = facts.website_url;
-    patch.website = facts.website_url;
+  for (const [column, value] of Object.entries(candidates)) {
+    if (!isBlank(value) && isBlank(existing[column])) {
+      patch[column] = value;
+    }
   }
-  if (facts.has_website !== undefined) patch.has_website = facts.has_website;
-  if (facts.audience !== undefined) patch.audience = facts.audience;
-  if (facts.offer !== undefined) patch.offer = facts.offer;
-  if (facts.business_idea !== undefined) patch.business_idea = facts.business_idea;
-  if (facts.name !== undefined) patch.name = facts.name;
 
   if (Object.keys(patch).length === 0) return { ok: true };
 
@@ -379,14 +417,20 @@ export async function completeArchitectaOnboardingWithData(
 
   if (!user) return { ok: false, error: "Not authenticated" };
 
+  // A "low" confidence analysis is context, not a fact — it backfills gaps
+  // in the brand profile below but never overwrites a real user answer.
+  const wa = answers.website_analysis;
+  const websiteConfident = !!wa && wa.confidence !== "low";
+
   // 1. Persist shared business facts to profiles
+  //    Backfill-only; the brand name is Architecta brand data (brand_profiles),
+  //    never the person's shared profile name.
   const sharedResult = await persistSharedBusinessFacts({
     industry: answers.industry,
     website_url: answers.website_url,
     has_website: answers.has_website,
     audience: answers.audience ?? answers.customer_role,
     offer: answers.description,
-    name: answers.brand_name,
   });
 
   if (!sharedResult.ok) {
@@ -410,8 +454,11 @@ export async function completeArchitectaOnboardingWithData(
     topics: answers.words_to_use
       ? { include: answers.words_to_use, avoid: answers.words_to_avoid ?? [] }
       : undefined,
-    offers: answers.offers ?? answers.description,
-    mission: answers.mission,
+    // offers/mission are extracted during website analysis but no onboarding
+    // step asks about them directly — fall back to that evidence instead of
+    // discarding it, but only ever as a gap-filler behind the user's answer.
+    offers: answers.offers ?? (websiteConfident ? wa?.offers : undefined) ?? answers.description,
+    mission: answers.mission ?? (websiteConfident ? wa?.mission : undefined),
     vision: answers.vision,
     values: answers.brand_values?.join(", "),
     typical_customers: answers.typical_customers ?? answers.customer_role,
@@ -419,8 +466,22 @@ export async function completeArchitectaOnboardingWithData(
     required_elements: answers.words_to_use,
     source: {
       onboarding: true,
-      hasWebsiteAnalysis: !!answers.website_analysis,
+      hasWebsiteAnalysis: !!wa,
       completedAt: new Date().toISOString(),
+      // topics/differentiators/cta_patterns have no onboarding question of
+      // their own — preserved here as business intelligence instead of
+      // being thrown away after paying the model cost to extract them.
+      ...(wa
+        ? {
+            websiteInsights: {
+              topics: wa.topics,
+              differentiators: wa.differentiators,
+              cta_patterns: wa.cta_patterns,
+              confidence: wa.confidence,
+              analyzed_at: wa.analyzed_at,
+            },
+          }
+        : {}),
     },
   });
 
@@ -428,31 +489,25 @@ export async function completeArchitectaOnboardingWithData(
     return { ok: false, error: `Failed to update brand profile: ${brandResult.error}` };
   }
 
-  // 3. Mark onboarding session completed
-  const { error: sessionError } = await supabase
+  // 3. Mark the Architecta onboarding session completed. This is the sole
+  //    record of Architecta onboarding completion; the shared
+  //    profiles.onboarding_* fields belong to Entrepreneuria and are left alone.
+  const { data: completedSessions, error: sessionError } = await supabase
     .from("onboarding_sessions")
     .update({
       current_step: "finish",
-      status: "completed",
+      status: ONBOARDING_SESSION_STATUS.completed,
     })
     .eq("user_id", user.id)
-    .eq("app", "architecta");
+    .eq("app", ARCHITECTA_ONBOARDING_APP)
+    .select("id");
 
   if (sessionError) {
     return { ok: false, error: `Failed to complete session: ${sessionError.message}` };
   }
 
-  // 4. Mark profile onboarding complete (middleware gate)
-  const { error: profileError } = await supabase
-    .from("profiles")
-    .update({
-      onboarding_complete: true,
-      onboarding_completed_at: new Date().toISOString(),
-    })
-    .eq("id", user.id);
-
-  if (profileError) {
-    return { ok: false, error: `Failed to update profile: ${profileError.message}` };
+  if (!Array.isArray(completedSessions) || completedSessions.length === 0) {
+    return { ok: false, error: "Failed to complete session: onboarding session not found" };
   }
 
   return { ok: true };
@@ -502,14 +557,18 @@ export function buildPrefillFromSharedContext(
 
   if (shared) {
     if (shared.industry) prefill.industry = shared.industry;
-    if (shared.name) prefill.brand_name = shared.name;
     if (shared.website_url || shared.website) {
       prefill.website_url = shared.website_url ?? shared.website ?? undefined;
       prefill.has_website = true;
     } else if (shared.has_website === false) {
       prefill.has_website = false;
     }
-    if (shared.audience) prefill.audience = shared.audience;
+    if (shared.audience) {
+      prefill.audience = shared.audience;
+      // The Customers step's "who is your ideal customer" answer is the same
+      // fact Architecta writes back to profiles.audience on completion.
+      prefill.customer_role = shared.audience;
+    }
     if (shared.offer) prefill.description = shared.offer;
     if (shared.business_idea) {
       prefill.description = prefill.description ?? shared.business_idea;

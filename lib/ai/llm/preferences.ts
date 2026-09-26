@@ -1,6 +1,12 @@
 import "server-only";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  DEFAULT_TEXT_MODEL,
+  isAllowedImageModel,
+  isAllowedTextModel,
+  isAllowedVideoModel,
+} from "./policy";
 import type { LlmPreference } from "./types";
 
 export type UserAiPreference = {
@@ -11,10 +17,11 @@ export type UserAiPreference = {
   openaiVideoModel: string | null;
 };
 
+// No settings row means "auto": task routing picks the model, not a paid pin.
 export const DEFAULT_USER_AI_PREFERENCE: UserAiPreference = {
-  textProvider: "anthropic",
-  anthropicModel: "claude-sonnet-4-6",
-  openaiTextModel: "gpt-4o",
+  textProvider: "auto",
+  anthropicModel: DEFAULT_TEXT_MODEL.anthropic,
+  openaiTextModel: DEFAULT_TEXT_MODEL.openai,
   openaiImageModel: "gpt-image-1",
   openaiVideoModel: null,
 };
@@ -41,15 +48,21 @@ export async function getUserAiPreference(
       ? (data.text_provider as LlmPreference)
       : "auto";
 
+  // Stored model ids are only honoured when they are on the server allowlist.
   return {
     textProvider,
-    anthropicModel:
-      data.anthropic_model ?? DEFAULT_USER_AI_PREFERENCE.anthropicModel,
-    openaiTextModel:
-      data.openai_text_model ?? DEFAULT_USER_AI_PREFERENCE.openaiTextModel,
-    openaiImageModel:
-      data.openai_image_model ?? DEFAULT_USER_AI_PREFERENCE.openaiImageModel,
-    openaiVideoModel: data.openai_video_model ?? null,
+    anthropicModel: isAllowedTextModel("anthropic", data.anthropic_model)
+      ? data.anthropic_model
+      : DEFAULT_USER_AI_PREFERENCE.anthropicModel,
+    openaiTextModel: isAllowedTextModel("openai", data.openai_text_model)
+      ? data.openai_text_model
+      : DEFAULT_USER_AI_PREFERENCE.openaiTextModel,
+    openaiImageModel: isAllowedImageModel(data.openai_image_model)
+      ? data.openai_image_model
+      : DEFAULT_USER_AI_PREFERENCE.openaiImageModel,
+    openaiVideoModel: isAllowedVideoModel(data.openai_video_model)
+      ? data.openai_video_model
+      : null,
   };
 }
 

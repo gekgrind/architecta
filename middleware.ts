@@ -11,6 +11,7 @@ import {
   getPostAuthRedirectPath,
 } from "@/lib/auth/redirects";
 import { hasArchitectaAccess } from "@/lib/auth/profile";
+import { fetchArchitectaOnboardingComplete } from "@/lib/onboarding/gate";
 import { getSupabaseProjectConfig } from "@/lib/config/ecosystem";
 import { getSharedSupabaseCookieOptions } from "@/lib/supabase/cookies";
 
@@ -74,13 +75,14 @@ export async function middleware(req: NextRequest) {
   let hasAccess = true;
 
   if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .maybeSingle();
+    // Onboarding completion comes from Architecta's own onboarding session,
+    // not the shared profiles.onboarding_complete (Entrepreneuria) flag.
+    const [{ data: profile }, architectaOnboardingComplete] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+      fetchArchitectaOnboardingComplete(supabase, user.id),
+    ]);
 
-    onboardingComplete = Boolean(profile?.onboarding_complete);
+    onboardingComplete = architectaOnboardingComplete;
     hasAccess = hasArchitectaAccess(profile ?? undefined);
   }
 

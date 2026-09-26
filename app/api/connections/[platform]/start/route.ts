@@ -5,14 +5,13 @@ import { NextResponse } from "next/server";
 import { apiError } from "@/lib/api/response";
 import { getAuthenticatedUser } from "@/lib/auth/server";
 import { redirectUriFor } from "@/lib/publishing/connections";
+import { STATE_COOKIE } from "@/lib/publishing/oauth-state";
 import { getAdapter, isPlatformId } from "@/lib/publishing/registry";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 type RouteContext = { params: Promise<{ platform: string }> };
-
-export const STATE_COOKIE = "arch_oauth_state";
 
 export async function GET(_req: Request, ctx: RouteContext) {
   const { platform } = await ctx.params;

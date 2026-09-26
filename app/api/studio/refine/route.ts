@@ -1,12 +1,9 @@
-import OpenAI from "openai";
+import { runGateway } from "@/lib/ai/llm/run";
 import { apiError, apiOk, parseJsonBody } from "@/lib/api/response";
 import { getAuthenticatedUser } from "@/lib/auth/server";
 import type { StudioRefineRequest, StudioRefineResult } from "@/lib/domain";
+import { enforceAiUsage, RATE_LIMITS } from "@/lib/ratelimit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
 
 export async function POST(req: Request) {
   try {
@@ -19,6 +16,9 @@ export async function POST(req: Request) {
     const supabase = await createSupabaseServerClient();
     const session = await getAuthenticatedUser(supabase);
     if (!session) return apiError("unauthorized", "Unauthorized");
+
+    const limited = await enforceAiUsage(session.user.id, RATE_LIMITS.studioRefine);
+    if (limited) return limited;
 
     const instructions: string[] = [];
 
@@ -61,16 +61,18 @@ Refinement instructions:
 - ${instructions.join("\n- ")}
 `.trim();
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
+    // Provider, model and token cap are chosen server-side by the gateway.
+    const completion = await runGateway({
+      userId: session.user.id,
+      task: "POST_REVISION",
+      tier: "draft",
+      systemPrompt,
+      prompt: userPrompt,
       temperature: 0.4,
+      metadata: { source: "studio_refine" },
     });
 
-    const text = completion.choices[0]?.message?.content?.trim();
+    const text = completion.text.trim();
     if (!text) return apiError("upstream_error", "No refined output returned");
 
     const memorySignals: {

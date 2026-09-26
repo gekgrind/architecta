@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { APP_HOME_PATH } from "@/lib/auth/redirects";
 import { requireAuthenticatedUser } from "@/lib/auth/requireAuthenticatedUser";
 import { getOrCreateArchitectaOnboarding } from "@/lib/onboarding/server";
+import { isArchitectaOnboardingComplete } from "@/lib/onboarding/gate";
 
 export default async function OnboardingLayout({
   children,
@@ -13,7 +14,7 @@ export default async function OnboardingLayout({
 
   const { session } = await getOrCreateArchitectaOnboarding();
 
-  if (session.status === "completed") {
+  if (isArchitectaOnboardingComplete(session)) {
     redirect(APP_HOME_PATH);
   }
 

@@ -9,7 +9,7 @@ import {
 import { extractJson } from "@/lib/ai/llm/json";
 import { runGateway } from "@/lib/ai/llm/run";
 import { getUserAiPreference } from "@/lib/ai/llm/preferences";
-import { enforceRateLimit, RATE_LIMITS } from "@/lib/ratelimit";
+import { enforceAiUsage, RATE_LIMITS } from "@/lib/ratelimit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { videoGenerateInputSchema } from "@/lib/validation";
 
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   const session = await getAuthenticatedUser(supabase);
   if (!session) return apiError("unauthorized", "Unauthorized");
 
-  const limited = await enforceRateLimit(session.user.id, RATE_LIMITS.videoGenerate);
+  const limited = await enforceAiUsage(session.user.id, RATE_LIMITS.videoGenerate);
   if (limited) return limited;
 
   const body = await parseJsonBody<unknown>(req);

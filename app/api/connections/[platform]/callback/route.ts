@@ -5,9 +5,9 @@ import { apiError } from "@/lib/api/response";
 import { getAuthenticatedUser } from "@/lib/auth/server";
 import { logCallbackFailure, type CallbackStage } from "@/lib/publishing/diagnostics";
 import { redirectUriFor, upsertConnection } from "@/lib/publishing/connections";
+import { STATE_COOKIE } from "@/lib/publishing/oauth-state";
 import { getAdapter, isPlatformId } from "@/lib/publishing/registry";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { STATE_COOKIE } from "../start/route";
 
 export const runtime = "nodejs";
 
