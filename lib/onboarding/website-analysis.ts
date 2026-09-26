@@ -2,6 +2,7 @@ import "server-only";
 
 import { runGateway } from "@/lib/ai/llm/run";
 import { extractJson } from "@/lib/ai/llm/json";
+import { aiUsageDeniedMessage, checkAiUsage, RATE_LIMITS } from "@/lib/ratelimit";
 import type { WebsiteAnalysisResult } from "./persistence";
 import { WEBSITE_ANALYSIS_FAILED_MESSAGE } from "./website-step-flow";
 
@@ -250,6 +251,12 @@ export async function analyzeWebsite(
 
   if (websiteText.length < 50) {
     return { ok: false, error: websiteUnreadable("not enough readable text on the page") };
+  }
+
+  // Per-user AI limit + daily budget, checked right before the model call.
+  const allowance = await checkAiUsage(userId, RATE_LIMITS.websiteAnalysis);
+  if (!allowance.allowed) {
+    return { ok: false, error: aiUsageDeniedMessage(allowance) };
   }
 
   let modelText: string;

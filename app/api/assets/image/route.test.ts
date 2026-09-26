@@ -1,9 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   getAuthenticatedUser: vi.fn(),
   createSupabaseServerClient: vi.fn(),
-  enforceRateLimit: vi.fn(),
+  enforceAiUsage: vi.fn(),
   generateImage: vi.fn(),
   getUserAiPreference: vi.fn(),
 }));
@@ -13,10 +13,13 @@ vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: h.createSupabaseServerClient,
 }));
 vi.mock("@/lib/ratelimit", () => ({
-  enforceRateLimit: h.enforceRateLimit,
+  enforceAiUsage: h.enforceAiUsage,
   RATE_LIMITS: { imageGenerate: { action: "assets.image", limit: 10, windowSeconds: 60 } },
 }));
-vi.mock("@/lib/ai/llm/providers/openai-images", () => ({ generateImage: h.generateImage }));
+vi.mock("@/lib/ai/llm/providers/openai-images", () => ({
+  generateImage: h.generateImage,
+  ImageGenerationUnavailableError: class ImageGenerationUnavailableError extends Error {},
+}));
 vi.mock("@/lib/ai/llm/preferences", () => ({ getUserAiPreference: h.getUserAiPreference }));
 
 import { POST } from "./route";
@@ -75,8 +78,38 @@ function req(body: unknown) {
 
 beforeEach(() => {
   Object.values(h).forEach((m) => "mockReset" in m && m.mockReset());
-  h.enforceRateLimit.mockResolvedValue(null);
+  h.enforceAiUsage.mockResolvedValue(null);
   h.getUserAiPreference.mockResolvedValue({ openaiImageModel: "gpt-image-1" });
+  vi.stubEnv("AI_TEST_PROVIDER", "");
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+describe("POST /api/assets/image in NVIDIA-only test mode", () => {
+  it("returns a controlled 503 and never generates or spends budget", async () => {
+    vi.stubEnv("AI_TEST_PROVIDER", "nvidia");
+    h.createSupabaseServerClient.mockResolvedValue({});
+    h.getAuthenticatedUser.mockResolvedValue({ user: { id: USER_ID } });
+
+    const res = await POST(req({ prompt: "a cat" }));
+
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { ok: boolean; error: { message: string } };
+    expect(body.ok).toBe(false);
+    expect(body.error.message).toMatch(/test mode/i);
+    expect(h.generateImage).not.toHaveBeenCalled();
+    expect(h.enforceAiUsage).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-allowlisted model with 422 before generation", async () => {
+    h.createSupabaseServerClient.mockResolvedValue({});
+    h.getAuthenticatedUser.mockResolvedValue({ user: { id: USER_ID } });
+    const res = await POST(req({ prompt: "a cat", model: "gpt-image-99" }));
+    expect(res.status).toBe(422);
+    expect(h.generateImage).not.toHaveBeenCalled();
+  });
 });
 
 describe("POST /api/assets/image", () => {
@@ -89,7 +122,7 @@ describe("POST /api/assets/image", () => {
   it("429 when rate limited, before generation", async () => {
     h.createSupabaseServerClient.mockResolvedValue({});
     h.getAuthenticatedUser.mockResolvedValue({ user: { id: USER_ID } });
-    h.enforceRateLimit.mockResolvedValue(new Response("{}", { status: 429 }));
+    h.enforceAiUsage.mockResolvedValue(new Response("{}", { status: 429 }));
     const res = await POST(req({ prompt: "a cat" }));
     expect(res.status).toBe(429);
     expect(h.generateImage).not.toHaveBeenCalled();
