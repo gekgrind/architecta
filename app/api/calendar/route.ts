@@ -1,5 +1,10 @@
 import { apiError, apiOk, parseJsonBody } from "@/lib/api/response";
 import { getAuthenticatedUser } from "@/lib/auth/server";
+import {
+  scheduleErrorResponse,
+  schedulePost,
+  unschedulePost,
+} from "@/lib/publishing/schedule";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { calendarItemInputSchema } from "@/lib/validation/calendar";
 
@@ -114,10 +119,9 @@ export async function POST(req: Request) {
   }
   const input = parsed.data;
 
-  const insertRow = {
-    user_id: session.user.id,
+  const userId = session.user.id;
+  const fields = {
     workspace_id: input.workspaceId ?? null,
-    post_id: input.postId ?? null,
     campaign_id: input.campaignId ?? null,
     scheduled_for: input.scheduledFor,
     platform: input.platform,
@@ -125,24 +129,83 @@ export async function POST(req: Request) {
     notes: input.notes ?? null,
   };
 
-  const { data, error } = await supabase
-    .from("architecta_content_calendar_items")
-    .insert(insertRow)
-    .select("*")
-    .single();
-
-  if (error) return apiError("server_error", error.message);
-
+  // One calendar item per post: re-scheduling a post reuses its existing item
+  // instead of adding a second entry for the same post.
+  let existing: CalendarRow | null = null;
   if (input.postId) {
-    await supabase
-      .from("architecta_posts")
-      .update({
-        status: "scheduled",
-        scheduled_for: input.scheduledFor,
-      })
-      .eq("user_id", session.user.id)
-      .eq("id", input.postId);
+    const { data: found, error: findError } = await supabase
+      .from("architecta_content_calendar_items")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("post_id", input.postId)
+      .order("created_at", { ascending: true })
+      .limit(1);
+    if (findError) return apiError("server_error", findError.message);
+    existing = ((found ?? []) as CalendarRow[])[0] ?? null;
+
+    // A non-scheduled entry must not leave the post publishable: take it out of
+    // the queue before touching the calendar.
+    if (input.status !== "scheduled") {
+      const unscheduled = await unschedulePost(supabase, userId, input.postId);
+      if (!unscheduled.ok) return scheduleErrorResponse(unscheduled);
+    }
   }
 
-  return apiOk({ item: toCamel(data as CalendarRow) });
+  const { data, error } = existing
+    ? await supabase
+        .from("architecta_content_calendar_items")
+        .update(fields)
+        .eq("user_id", userId)
+        .eq("id", existing.id)
+        .select("*")
+        .single()
+    : await supabase
+        .from("architecta_content_calendar_items")
+        .insert({ ...fields, user_id: userId, post_id: input.postId ?? null })
+        .select("*")
+        .single();
+
+  if (error) return apiError("server_error", error.message);
+  const item = data as CalendarRow;
+
+  // The post row is what the publish worker reads. It is written last, so a
+  // failure here leaves the post unpublishable; the calendar write is then
+  // rolled back so the UI doesn't show a schedule that won't happen.
+  if (input.postId && input.status === "scheduled") {
+    const scheduled = await schedulePost(supabase, userId, input.postId, input.scheduledFor);
+    if (!scheduled.ok) {
+      const rollback = existing
+        ? supabase
+            .from("architecta_content_calendar_items")
+            .update({
+              workspace_id: existing.workspace_id,
+              campaign_id: existing.campaign_id,
+              scheduled_for: existing.scheduled_for,
+              platform: existing.platform,
+              status: existing.status,
+              notes: existing.notes,
+            })
+            .eq("user_id", userId)
+            .eq("id", existing.id)
+        : supabase
+            .from("architecta_content_calendar_items")
+            .delete()
+            .eq("user_id", userId)
+            .eq("id", item.id);
+      const { error: rollbackError } = await rollback;
+      if (rollbackError) {
+        console.error(
+          JSON.stringify({
+            scope: "calendar",
+            event: "schedule_rollback_failed",
+            itemId: item.id,
+            dbError: rollbackError.message,
+          })
+        );
+      }
+      return scheduleErrorResponse(scheduled);
+    }
+  }
+
+  return apiOk({ item: toCamel(item) });
 }
