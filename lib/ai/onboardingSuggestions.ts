@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { runGateway } from "@/lib/ai/llm/run";
+import { aiUsageDeniedMessage, checkAiUsage, RATE_LIMITS } from "@/lib/ratelimit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function getOnboardingSuggestions({
@@ -29,6 +30,11 @@ export async function getOnboardingSuggestions({
 
   if (!user) {
     return { ok: false as const, error: "Not authenticated" };
+  }
+
+  const allowance = await checkAiUsage(user.id, RATE_LIMITS.onboardingSuggest);
+  if (!allowance.allowed) {
+    return { ok: false as const, error: aiUsageDeniedMessage(allowance) };
   }
 
   const prompt = `

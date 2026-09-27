@@ -76,6 +76,10 @@ function makeDb(
         filters.push((r) => String(r[c]) < v);
         return q;
       },
+      lte: (c: string, v: string) => {
+        filters.push((r) => r[c] != null && String(r[c]) <= v);
+        return q;
+      },
       then: (f: (v: unknown) => unknown, r?: (e: unknown) => unknown) =>
         Promise.resolve(run()).then(f, r),
     });
@@ -91,6 +95,7 @@ const basePost = (over: Row = {}): Row => ({
   hook: "H",
   caption: "C",
   status: "scheduled",
+  scheduled_for: "2020-01-01T00:00:00.000Z",
   publish_attempts: 0,
   meta: {},
   ...over,
@@ -136,6 +141,20 @@ describe("claimPost", () => {
   it("throws (not silently false) when the claim write errors", async () => {
     const db = makeDb([basePost()], () => true);
     await expect(claimPost(db.client, asPost(basePost()), "scheduled")).rejects.toThrow(/claim/i);
+  });
+
+  it("cron cannot claim a post rescheduled into the future after the due scan picked it up", async () => {
+    // The cron scan saw the post as due; the user then moved it to a later time.
+    const db = makeDb([basePost({ scheduled_for: "2999-01-01T00:00:00.000Z" })]);
+    expect(await claimPost(db.client, asPost(basePost()), "scheduled")).toBe(false);
+    expect(db.tables.architecta_posts[0].status).toBe("scheduled");
+    // An explicit Publish Now is unaffected by the scheduled time.
+    expect(await claimPost(db.client, asPost(basePost()), "manual")).toBe(true);
+  });
+
+  it("cron cannot claim a post that was unscheduled after the due scan", async () => {
+    const db = makeDb([basePost({ status: "draft", scheduled_for: null })]);
+    expect(await claimPost(db.client, asPost(basePost()), "scheduled")).toBe(false);
   });
 });
 

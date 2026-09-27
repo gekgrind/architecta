@@ -16,7 +16,6 @@ import {
   buildPrefillFromSharedContext,
   loadSharedBusinessContext,
   loadOnboardingSession,
-  type OnboardingAnswers,
   type SharedBusinessContext,
   type BrandProfileData,
 } from "./persistence";
@@ -170,9 +169,22 @@ describe("saveOnboardingProgress", () => {
    persistSharedBusinessFacts
 ======================================================= */
 
+const EMPTY_SHARED_ROW = {
+  data: {
+    industry: null,
+    website: null,
+    website_url: null,
+    has_website: null,
+    audience: null,
+    offer: null,
+    business_idea: null,
+  },
+  error: null,
+};
+
 describe("persistSharedBusinessFacts", () => {
   it("updates profiles with patch semantics", async () => {
-    const supabase = makeSupabaseMock();
+    const supabase = makeSupabaseMock({ profiles: EMPTY_SHARED_ROW });
 
     const result = await persistSharedBusinessFacts({
       industry: "Tech",
@@ -190,7 +202,7 @@ describe("persistSharedBusinessFacts", () => {
   });
 
   it("writes both website and website_url for compatibility", async () => {
-    const supabase = makeSupabaseMock();
+    const supabase = makeSupabaseMock({ profiles: EMPTY_SHARED_ROW });
 
     await persistSharedBusinessFacts({
       website_url: "https://test.com",
@@ -291,13 +303,13 @@ describe("buildPrefillFromSharedContext", () => {
       goal_90_day: null,
       goal90: null,
       experience_level: null,
-      onboarding_complete: false,
-      name: "TestCo",
     };
 
     const result = buildPrefillFromSharedContext(shared, null);
 
-    expect(result.brand_name).toBe("TestCo");
+    // The shared profile carries no brand name; a person's name is never
+    // treated as their brand name.
+    expect(result.brand_name).toBeUndefined();
     expect(result.industry).toBe("Tech");
     expect(result.website_url).toBe("https://example.com");
     expect(result.has_website).toBe(true);
@@ -323,8 +335,6 @@ describe("buildPrefillFromSharedContext", () => {
       goal_90_day: null,
       goal90: null,
       experience_level: null,
-      onboarding_complete: false,
-      name: "OldName",
     };
 
     const brand: BrandProfileData = {
@@ -382,8 +392,6 @@ describe("buildPrefillFromSharedContext", () => {
       goal_90_day: null,
       goal90: null,
       experience_level: null,
-      onboarding_complete: false,
-      name: null,
     };
 
     const result = buildPrefillFromSharedContext(shared, null);
@@ -400,33 +408,101 @@ describe("buildPrefillFromSharedContext", () => {
 ======================================================= */
 
 describe("completeArchitectaOnboardingWithData", () => {
-  it("persists to profiles, brand_profiles, and marks session complete", async () => {
-    const supabase = makeSupabaseMock();
-
-    const answers: OnboardingAnswers = {
-      brand_name: "TestBrand",
-      industry: "SaaS",
-      website_url: "https://test.com",
-      has_website: true,
-      description: "We build tools",
-      customer_role: "Founders",
-      voice_tone: "bold",
-      brand_values: ["Clarity", "Innovation"],
-    };
-
-    const result = await completeArchitectaOnboardingWithData(answers);
-
-    expect(result).toEqual({ ok: true });
-    expect(supabase.update).toHaveBeenCalled();
-    expect(supabase.upsert).toHaveBeenCalled();
-  });
-
   it("returns error when not authenticated", async () => {
     makeUnauthenticatedMock();
 
     const result = await completeArchitectaOnboardingWithData({});
 
     expect(result).toEqual({ ok: false, error: "Not authenticated" });
+  });
+
+  it("falls back to website-analysis offers/mission when no onboarding step set them", async () => {
+    const supabase = makeSupabaseMock();
+
+    await completeArchitectaOnboardingWithData({
+      brand_name: "TestBrand",
+      website_analysis: {
+        offers: "Brand kit generation",
+        mission: "Make brand-building accessible to every founder.",
+        confidence: "high",
+        analyzed_at: "2026-01-01T00:00:00.000Z",
+      },
+    });
+
+    const upsertCall = supabase.upsert.mock.calls[0][0];
+    expect(upsertCall.offers).toBe("Brand kit generation");
+    expect(upsertCall.mission).toBe("Make brand-building accessible to every founder.");
+  });
+
+  it("never lets website-analysis offers/mission override a user-entered answer", async () => {
+    const supabase = makeSupabaseMock();
+
+    await completeArchitectaOnboardingWithData({
+      offers: "User-entered offer",
+      mission: "User-entered mission",
+      website_analysis: {
+        offers: "Website-derived offer",
+        mission: "Website-derived mission",
+        confidence: "high",
+        analyzed_at: "2026-01-01T00:00:00.000Z",
+      },
+    });
+
+    const upsertCall = supabase.upsert.mock.calls[0][0];
+    expect(upsertCall.offers).toBe("User-entered offer");
+    expect(upsertCall.mission).toBe("User-entered mission");
+  });
+
+  it("does not fall back to a low-confidence website analysis for offers/mission", async () => {
+    const supabase = makeSupabaseMock();
+
+    await completeArchitectaOnboardingWithData({
+      description: "Fallback description",
+      website_analysis: {
+        offers: "Guessed offer",
+        mission: "Guessed mission",
+        confidence: "low",
+        analyzed_at: "2026-01-01T00:00:00.000Z",
+      },
+    });
+
+    const upsertCall = supabase.upsert.mock.calls[0][0];
+    expect(upsertCall.mission).toBeUndefined();
+    // offers still falls back to description, just never to the low-confidence guess.
+    expect(upsertCall.offers).toBe("Fallback description");
+  });
+
+  it("preserves topics/differentiators/cta_patterns as business intelligence in source instead of discarding them", async () => {
+    const supabase = makeSupabaseMock();
+
+    await completeArchitectaOnboardingWithData({
+      website_analysis: {
+        topics: ["brand building", "content strategy"],
+        differentiators: ["Built for solo founders"],
+        cta_patterns: ["Start building"],
+        confidence: "medium",
+        analyzed_at: "2026-01-01T00:00:00.000Z",
+      },
+    });
+
+    const upsertCall = supabase.upsert.mock.calls[0][0];
+    expect(upsertCall.source.websiteInsights).toEqual({
+      topics: ["brand building", "content strategy"],
+      differentiators: ["Built for solo founders"],
+      cta_patterns: ["Start building"],
+      confidence: "medium",
+      analyzed_at: "2026-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("omits websiteInsights when there is no website analysis", async () => {
+    const supabase = makeSupabaseMock();
+
+    await completeArchitectaOnboardingWithData({ brand_name: "TestBrand" });
+
+    const upsertCall = supabase.upsert.mock.calls[0][0];
+    expect(upsertCall.source.websiteInsights).toBeUndefined();
+    expect(upsertCall.source.hasWebsiteAnalysis).toBe(false);
   });
 });
 
@@ -459,7 +535,7 @@ describe("loadSharedBusinessContext", () => {
     const result = await loadSharedBusinessContext();
 
     expect(result).not.toBeNull();
-    expect(result?.name).toBe("TestCo");
+    expect(result?.industry).toBe("Tech");
   });
 });
 

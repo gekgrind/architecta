@@ -4,7 +4,6 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   Bookmark,
   Copy,
@@ -12,10 +11,10 @@ import {
   Sparkles,
   ChevronDown,
   Lightbulb,
-  Clock,
   Check,
   FileText,
   FileDown,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { VisualAssetsCard } from "./visual-assets-card"
@@ -25,6 +24,10 @@ interface ActionsPanelProps {
   contentScore: number | null
   content: string
   postId?: string
+  onSave?: () => void
+  isSaving?: boolean
+  /** True only when the server confirmed the current editor content is saved. */
+  isSaved?: boolean
   visualPrompt?: string
 }
 
@@ -34,32 +37,22 @@ const suggestions = [
   { text: "End with a stronger CTA", id: 3 },
 ]
 
-const versions = [
-  { id: 1, timestamp: "2 min ago", preview: "The secret to success..." },
-  { id: 2, timestamp: "5 min ago", preview: "What I've learned about..." },
-  { id: 3, timestamp: "10 min ago", preview: "Here's a framework for..." },
-]
-
 export function ActionsPanel({
   hasContent,
   contentScore,
   content,
   postId,
+  onSave,
+  isSaving = false,
+  isSaved = false,
   visualPrompt,
 }: ActionsPanelProps) {
   const [copied, setCopied] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [historyOpen, setHistoryOpen] = useState(false)
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(content)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
-  }
-
-  const handleSave = () => {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
   }
 
   const getScoreColor = (score: number) => {
@@ -181,10 +174,15 @@ export function ActionsPanel({
           <Button
             variant="secondary"
             className="w-full justify-start gap-2"
-            onClick={handleSave}
-            disabled={!hasContent}
+            onClick={onSave}
+            disabled={!hasContent || !onSave || isSaving}
           >
-            {saved ? (
+            {isSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : isSaved ? (
               <>
                 <Check className="h-4 w-4" />
                 Saved!
@@ -245,43 +243,6 @@ export function ActionsPanel({
           </DropdownMenu>
         </CardContent>
       </Card>
-
-      {/* Version History */}
-      <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
-        <Card className={cn(!hasContent && "opacity-50")}>
-          <CollapsibleTrigger asChild>
-            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors rounded-t-lg">
-              <CardTitle className="text-sm flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  Version History
-                </span>
-                <ChevronDown
-                  className={cn("h-4 w-4 text-muted-foreground transition-transform", historyOpen && "rotate-180")}
-                />
-              </CardTitle>
-            </CardHeader>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <CardContent className="pt-0 space-y-2">
-              {versions.map((version) => (
-                <div
-                  key={version.id}
-                  className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors"
-                >
-                  <div>
-                    <p className="text-xs text-muted-foreground">{version.timestamp}</p>
-                    <p className="text-sm text-foreground truncate max-w-[150px]">{version.preview}</p>
-                  </div>
-                  <Button variant="ghost" size="sm" className="text-xs" disabled={!hasContent}>
-                    Restore
-                  </Button>
-                </div>
-              ))}
-            </CardContent>
-          </CollapsibleContent>
-        </Card>
-      </Collapsible>
     </div>
   )
 }

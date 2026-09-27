@@ -1,4 +1,5 @@
 import type { LlmClient, LlmMessage, LlmResult } from "../types";
+import { httpError, postJson, requireApiKey } from "./http";
 
 type OpenAiCompletionResponse = {
   choices?: Array<{
@@ -24,34 +25,27 @@ export function createOpenAiClient(): LlmClient {
   return {
     provider: "openai",
     async generate(input) {
-      const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+      const apiKey = requireApiKey("openai", "OPENAI_API_KEY");
 
       const started = Date.now();
 
-      // Using fetch keeps dependencies simple.
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
+      const { res, json: body } = await postJson("openai", "https://api.openai.com/v1/chat/completions", {
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
+        body: {
           model: input.model,
           messages: toOpenAiMessages(input.messages),
           temperature: input.temperature ?? 0.7,
           max_tokens: input.maxTokens ?? 1200,
-        }),
+        },
       });
 
-      const json = (await res.json()) as OpenAiCompletionResponse;
+      const json = body as OpenAiCompletionResponse;
 
       if (!res.ok) {
-        const err = Object.assign(new Error(json.error?.message || "OpenAI error"), {
-          status: res.status,
-          raw: json,
-        });
-        throw err;
+        throw httpError("openai", res.status, json.error?.message || "OpenAI error", json);
       }
 
       const text = json.choices?.[0]?.message?.content ?? "";

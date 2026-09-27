@@ -1,8 +1,12 @@
 import { apiError, apiOk, parseJsonBody } from "@/lib/api/response";
 import { getAuthenticatedUser } from "@/lib/auth/server";
-import { generateImage } from "@/lib/ai/llm/providers/openai-images";
+import {
+  generateImage,
+  ImageGenerationUnavailableError,
+} from "@/lib/ai/llm/providers/openai-images";
+import { isPaidAiDisabled } from "@/lib/ai/llm/policy";
 import { getUserAiPreference } from "@/lib/ai/llm/preferences";
-import { enforceRateLimit, RATE_LIMITS } from "@/lib/ratelimit";
+import { enforceAiUsage, RATE_LIMITS } from "@/lib/ratelimit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { imageGenerateInputSchema } from "@/lib/validation";
 
@@ -10,6 +14,14 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const ASSET_BUCKET = "architecta-assets";
+
+function imageUnavailable() {
+  return apiError(
+    "server_error",
+    "Image generation is unavailable while Architecta is in AI test mode.",
+    { status: 503, details: { reason: "ai_test_mode" } }
+  );
+}
 
 function base64ToBuffer(b64: string): Buffer {
   return Buffer.from(b64, "base64");
@@ -20,7 +32,11 @@ export async function POST(req: Request) {
   const session = await getAuthenticatedUser(supabase);
   if (!session) return apiError("unauthorized", "Unauthorized");
 
-  const limited = await enforceRateLimit(session.user.id, RATE_LIMITS.imageGenerate);
+  // Image generation is OpenAI-only and has no NVIDIA equivalent: it is
+  // unavailable (never silently paid) while AI_TEST_PROVIDER is set.
+  if (isPaidAiDisabled()) return imageUnavailable();
+
+  const limited = await enforceAiUsage(session.user.id, RATE_LIMITS.imageGenerate);
   if (limited) return limited;
 
   const body = await parseJsonBody<unknown>(req);
@@ -57,6 +73,7 @@ export async function POST(req: Request) {
       quality: input.quality,
     });
   } catch (err) {
+    if (err instanceof ImageGenerationUnavailableError) return imageUnavailable();
     const message = err instanceof Error ? err.message : "Image generation failed";
     return apiError("upstream_error", message);
   }

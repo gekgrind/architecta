@@ -7,6 +7,7 @@ import StepNavigation from "@/components/onboarding/StepNavigation";
 import ChoiceCard from "@/components/onboarding/ChoiceCard";
 import { getPreviousStepUrl } from "@/lib/onboarding/steps";
 import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
+import { confidentWebsiteValue } from "@/lib/onboarding/website-step-flow";
 
 type CustomersStepProps = {
   answers: OnboardingAnswers;
@@ -28,9 +29,12 @@ export default function CustomersStep({ answers }: CustomersStepProps) {
   const [error, setError] = useState<string | null>(null);
 
   const wa = answers.website_analysis;
+  const suggestedRole =
+    confidentWebsiteValue(wa?.typical_customers, wa?.confidence) ??
+    confidentWebsiteValue(wa?.audience, wa?.confidence);
 
   const [role, setRole] = useState(
-    answers.customer_role ?? wa?.typical_customers ?? wa?.audience ?? ""
+    answers.customer_role ?? suggestedRole ?? ""
   );
   const [pains, setPains] = useState<string[]>(
     answers.customer_pains ?? []
@@ -81,6 +85,14 @@ export default function CustomersStep({ answers }: CustomersStepProps) {
 
   return (
     <div className="space-y-8">
+      {suggestedRole && !answers.customer_role && (
+        <div className="bp-notice">
+          <p>
+            Based on your website, we&apos;ve filled this in for you: <strong>{suggestedRole}</strong>. Change anything that doesn&apos;t look right.
+          </p>
+        </div>
+      )}
+
       <div className="space-y-6">
         <div className="space-y-2">
           <label htmlFor="onb-customer-role" className="bp-label">

@@ -1,8 +1,9 @@
-import OpenAI from "openai";
 import { apiError, apiOk, parseJsonBody } from "@/lib/api/response";
 import { getAuthenticatedUser } from "@/lib/auth/server";
 import { getMemoryForGeneration } from "@/lib/ai/getMemoryForGeneration";
+import { runGateway } from "@/lib/ai/llm/run";
 import type { GenerationRequest, GenerationResult } from "@/lib/domain";
+import { enforceAiUsage, RATE_LIMITS } from "@/lib/ratelimit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -12,6 +13,9 @@ export async function POST(req: Request) {
     const supabase = await createSupabaseServerClient();
     const session = await getAuthenticatedUser(supabase);
     if (!session) return apiError("unauthorized", "Unauthorized");
+
+    const limited = await enforceAiUsage(session.user.id, RATE_LIMITS.studioGenerate);
+    if (limited) return limited;
 
     const body = await parseJsonBody<GenerationRequest>(req);
     const gen = body?.gen;
@@ -69,25 +73,22 @@ Rules:
 - Output only the requested content
 `.trim();
 
-    const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY!,
-    });
-
-    const model = "gpt-4.1-mini";
-    const completion = await client.chat.completions.create({
-      model,
+    // Provider, model and token cap are chosen server-side by the gateway.
+    const completion = await runGateway({
+      userId: session.user.id,
+      workspaceId,
+      task: "POST_GENERATION",
+      tier: "draft",
+      systemPrompt,
+      prompt: "Generate the content now.",
       temperature: 0.7,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: "Generate the content now." },
-      ],
+      metadata: { source: "studio_generate", platform: gen.platform },
     });
 
-    const text = completion.choices[0]?.message?.content ?? "";
     const result: GenerationResult = {
-      text,
-      provider: "openai",
-      model,
+      text: completion.text,
+      provider: completion.provider,
+      model: completion.model,
       createdAt: new Date().toISOString(),
     };
 

@@ -2,6 +2,7 @@ import "server-only";
 
 import { runGateway } from "@/lib/ai/llm/run";
 import { extractJson } from "@/lib/ai/llm/json";
+import { aiUsageDeniedMessage, checkAiUsage, RATE_LIMITS } from "@/lib/ratelimit";
 import type { WebsiteAnalysisResult } from "./persistence";
 import { WEBSITE_ANALYSIS_FAILED_MESSAGE } from "./website-step-flow";
 
@@ -141,7 +142,7 @@ async function fetchWebsiteContent(url: string): Promise<{ ok: true; text: strin
    HTML to Text Extraction (basic)
 ======================================================= */
 
-function htmlToText(html: string): string {
+function htmlToText(html: string, maxLen: number = 8000): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
     .replace(/<style[\s\S]*?<\/style>/gi, "")
@@ -165,7 +166,240 @@ function htmlToText(html: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .replace(/ {2,}/g, " ")
     .trim()
-    .slice(0, 8000);
+    .slice(0, maxLen);
+}
+
+/* =======================================================
+   Structured Data Extraction (deterministic, no model cost)
+
+   Pulls facts the site already publishes in machine-readable form —
+   OpenGraph tags and JSON-LD — before htmlToText() discards the <script>
+   and <meta> tags they live in. Used two ways: a compact summary is
+   handed to the model as trustworthy evidence, and a few high-value
+   fields (brand name, description) fall back to it directly when the
+   model's own extraction comes up empty.
+======================================================= */
+
+type StructuredSignals = {
+  ogSiteName?: string;
+  ogDescription?: string;
+  metaDescription?: string;
+  jsonLdOrgName?: string;
+  jsonLdOrgDescription?: string;
+  jsonLdSameAs?: string[];
+  jsonLdOfferNames?: string[];
+  jsonLdFaqQuestions?: string[];
+};
+
+function decodeEntities(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim();
+}
+
+function extractMetaContent(html: string, attr: "name" | "property", key: string): string | undefined {
+  const patterns = [
+    new RegExp(`<meta[^>]*${attr}=["']${key}["'][^>]*content=["']([^"']*)["']`, "i"),
+    new RegExp(`<meta[^>]*content=["']([^"']*)["'][^>]*${attr}=["']${key}["']`, "i"),
+  ];
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match) return decodeEntities(match[1]);
+  }
+  return undefined;
+}
+
+// JSON-LD blocks can be single objects, arrays of objects, or an object
+// wrapping an @graph array — normalize to a flat list of candidate nodes.
+function extractJsonLdNodes(html: string): Record<string, unknown>[] {
+  const nodes: Record<string, unknown>[] = [];
+  const blockPattern = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = blockPattern.exec(html)) !== null) {
+    try {
+      const parsed: unknown = JSON.parse(match[1].trim());
+      const graph =
+        parsed && typeof parsed === "object" && !Array.isArray(parsed) && Array.isArray((parsed as Record<string, unknown>)["@graph"])
+          ? ((parsed as Record<string, unknown>)["@graph"] as unknown[])
+          : undefined;
+
+      const candidates = graph ?? (Array.isArray(parsed) ? parsed : [parsed]);
+      for (const candidate of candidates) {
+        if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+          nodes.push(candidate as Record<string, unknown>);
+        }
+      }
+    } catch {
+      // Malformed JSON-LD is common in the wild; skip the block, not the page.
+    }
+  }
+
+  return nodes;
+}
+
+const JSON_LD_ORG_TYPES = new Set(["Organization", "LocalBusiness", "Corporation"]);
+const JSON_LD_OFFER_TYPES = new Set(["Product", "Service", "Offer"]);
+
+function extractStructuredSignals(html: string): StructuredSignals {
+  const signals: StructuredSignals = {
+    metaDescription: extractMetaContent(html, "name", "description"),
+    ogSiteName: extractMetaContent(html, "property", "og:site_name"),
+    ogDescription: extractMetaContent(html, "property", "og:description"),
+  };
+
+  for (const node of extractJsonLdNodes(html)) {
+    const rawType = node["@type"];
+    const type = typeof rawType === "string" ? rawType : Array.isArray(rawType) ? rawType[0] : undefined;
+    if (typeof type !== "string") continue;
+
+    if (JSON_LD_ORG_TYPES.has(type) && !signals.jsonLdOrgName) {
+      if (typeof node.name === "string") signals.jsonLdOrgName = node.name;
+      if (typeof node.description === "string") signals.jsonLdOrgDescription = node.description;
+      if (Array.isArray(node.sameAs)) {
+        const links = node.sameAs.filter((s): s is string => typeof s === "string");
+        if (links.length > 0) signals.jsonLdSameAs = links.slice(0, 8);
+      }
+    }
+
+    if (JSON_LD_OFFER_TYPES.has(type) && typeof node.name === "string") {
+      signals.jsonLdOfferNames = [...(signals.jsonLdOfferNames ?? []), node.name].slice(0, 8);
+    }
+
+    if (type === "FAQPage" && Array.isArray(node.mainEntity)) {
+      const questions = (node.mainEntity as unknown[])
+        .filter((q): q is Record<string, unknown> => !!q && typeof q === "object")
+        .map((q) => (typeof q.name === "string" ? q.name : undefined))
+        .filter((q): q is string => !!q);
+      if (questions.length > 0) {
+        signals.jsonLdFaqQuestions = [...(signals.jsonLdFaqQuestions ?? []), ...questions].slice(0, 8);
+      }
+    }
+  }
+
+  return signals;
+}
+
+function buildStructuredDataBlock(signals: StructuredSignals): string {
+  const lines: string[] = [];
+  if (signals.ogSiteName) lines.push(`Site name (OpenGraph): ${signals.ogSiteName}`);
+  if (signals.jsonLdOrgName) lines.push(`Organization name (JSON-LD): ${signals.jsonLdOrgName}`);
+  if (signals.jsonLdOrgDescription) lines.push(`Organization description (JSON-LD): ${signals.jsonLdOrgDescription}`);
+  if (signals.jsonLdSameAs?.length) lines.push(`Related/social links (JSON-LD sameAs): ${signals.jsonLdSameAs.join(", ")}`);
+  if (signals.jsonLdOfferNames?.length) lines.push(`Named products/services (JSON-LD): ${signals.jsonLdOfferNames.join(", ")}`);
+  if (signals.jsonLdFaqQuestions?.length) lines.push(`FAQ questions (JSON-LD): ${signals.jsonLdFaqQuestions.join(" | ")}`);
+
+  if (lines.length === 0) return "";
+  return `\n---STRUCTURED DATA (machine-readable, published by the site; prefer this over inferred text when they conflict)---\n${lines.join("\n")}\n---END STRUCTURED DATA---\n`;
+}
+
+/* =======================================================
+   Bounded Same-Origin Page Discovery
+
+   This is deliberately NOT a crawler: it only looks at links found in the
+   homepage's own HTML, never at links found on a secondary page, so there
+   is no recursion. At most a handful of same-origin pages that look like
+   About/Pricing/etc. are added to the evidence the model sees.
+======================================================= */
+
+const MAX_ADDITIONAL_PAGES = 3;
+const HOMEPAGE_CHAR_CAP = 8000;
+const SECONDARY_PAGE_CHAR_CAP = 3000;
+const MAX_TOTAL_CONTENT_CHARS = 16000;
+
+const VALUE_PAGE_KEYWORDS: { key: string; pattern: RegExp }[] = [
+  { key: "about", pattern: /\babout([-\s]?us)?\b|our[-\s]?story|who[-\s]?we[-\s]?are/i },
+  { key: "services", pattern: /\bservices?\b/i },
+  { key: "products", pattern: /\bproducts?\b/i },
+  { key: "features", pattern: /\bfeatures?\b/i },
+  { key: "solutions", pattern: /\bsolutions?\b/i },
+  { key: "pricing", pattern: /\bpricing\b|\bplans?\b/i },
+  { key: "customers", pattern: /\bcustomers?\b|\bclients?\b/i },
+  { key: "testimonials", pattern: /\btestimonials?\b|\breviews?\b/i },
+  { key: "case-studies", pattern: /case[-\s]?stud(y|ies)/i },
+  { key: "faq", pattern: /\bfaq\b|frequently[-\s]?asked/i },
+];
+
+type PageCandidate = { key: string; url: string };
+
+function normalizeUrlForDedup(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = "";
+    parsed.search = "";
+    let path = parsed.pathname;
+    if (path.length > 1 && path.endsWith("/")) path = path.slice(0, -1);
+    return `${parsed.origin}${path}`.toLowerCase();
+  } catch {
+    return url.toLowerCase();
+  }
+}
+
+/**
+ * Finds up to MAX_ADDITIONAL_PAGES same-origin links from the homepage HTML
+ * that look like high-value pages (About, Pricing, FAQ, ...). Only ever
+ * called on the homepage — never on a page it returns — so this cannot
+ * recurse into a crawl.
+ */
+function discoverCandidateLinks(html: string, baseUrl: string): PageCandidate[] {
+  let origin: string;
+  try {
+    origin = new URL(baseUrl).origin;
+  } catch {
+    return [];
+  }
+
+  const seenUrls = new Set<string>([normalizeUrlForDedup(baseUrl)]);
+  const seenKeys = new Set<string>();
+  const found: PageCandidate[] = [];
+
+  const anchorPattern = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = anchorPattern.exec(html)) !== null) {
+    const hrefRaw = match[1].trim();
+    if (!hrefRaw || /^(#|mailto:|tel:|javascript:)/i.test(hrefRaw)) continue;
+
+    let resolved: URL;
+    try {
+      resolved = new URL(hrefRaw, baseUrl);
+    } catch {
+      continue;
+    }
+
+    // Same-origin only: no arbitrary external URLs.
+    if (resolved.origin !== origin) continue;
+    if (isUnsafeUrl(resolved.toString())) continue;
+
+    const normalized = normalizeUrlForDedup(resolved.toString());
+    if (seenUrls.has(normalized)) continue;
+
+    const linkText = match[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const haystack = `${linkText} ${resolved.pathname}`.toLowerCase();
+
+    for (const { key, pattern } of VALUE_PAGE_KEYWORDS) {
+      if (seenKeys.has(key)) continue;
+      if (pattern.test(haystack)) {
+        seenUrls.add(normalized);
+        seenKeys.add(key);
+        found.push({ key, url: resolved.toString() });
+        break;
+      }
+    }
+  }
+
+  // Links are discovered in DOM order; re-sort to the keyword list's own
+  // priority (About > Services > ... > FAQ) before capping so the cap
+  // favors the highest-value categories, not whatever happened to appear
+  // first in the page's markup.
+  const priority = new Map(VALUE_PAGE_KEYWORDS.map((k, i) => [k.key, i]));
+  found.sort((a, b) => priority.get(a.key)! - priority.get(b.key)!);
+
+  return found.slice(0, MAX_ADDITIONAL_PAGES);
 }
 
 /* =======================================================
@@ -246,10 +480,41 @@ export async function analyzeWebsite(
     return { ok: false, error: websiteUnreadable(fetchResult.error) };
   }
 
-  const websiteText = htmlToText(fetchResult.text);
+  const structured = extractStructuredSignals(fetchResult.text);
+  const homepageText = htmlToText(fetchResult.text, HOMEPAGE_CHAR_CAP);
 
-  if (websiteText.length < 50) {
+  // Bounded, non-recursive discovery: only the homepage's own links are
+  // examined, and only a few same-origin, high-value pages are fetched.
+  const candidates = discoverCandidateLinks(fetchResult.text, fetchResult.finalUrl);
+  const secondaryFetches = await Promise.allSettled(candidates.map((c) => fetchWebsiteContent(c.url)));
+
+  const secondarySections: string[] = [];
+  let remainingBudget = MAX_TOTAL_CONTENT_CHARS - homepageText.length;
+  for (let i = 0; i < candidates.length && remainingBudget > 0; i++) {
+    const outcome = secondaryFetches[i];
+    // A secondary page failing (timeout, 404, redirect to an unsafe host)
+    // never fails the analysis — homepage-only evidence is still used.
+    if (outcome.status !== "fulfilled" || !outcome.value.ok) continue;
+
+    const pageText = htmlToText(outcome.value.text, Math.min(SECONDARY_PAGE_CHAR_CAP, remainingBudget));
+    if (!pageText) continue;
+
+    secondarySections.push(`\n\n=== ${candidates[i].key.toUpperCase()} PAGE (${candidates[i].url}) ===\n${pageText}`);
+    remainingBudget -= pageText.length;
+  }
+
+  const combinedText = `${homepageText}${secondarySections.join("")}`;
+
+  if (combinedText.length < 50) {
     return { ok: false, error: websiteUnreadable("not enough readable text on the page") };
+  }
+
+  const structuredBlock = buildStructuredDataBlock(structured);
+
+  // Per-user AI limit + daily budget, checked right before the model call.
+  const allowance = await checkAiUsage(userId, RATE_LIMITS.websiteAnalysis);
+  if (!allowance.allowed) {
+    return { ok: false, error: aiUsageDeniedMessage(allowance) };
   }
 
   let modelText: string;
@@ -259,7 +524,7 @@ export async function analyzeWebsite(
       task: "WEBSITE_ANALYSIS",
       tier: "draft",
       systemPrompt: ANALYSIS_SYSTEM_PROMPT,
-      prompt: `Analyze this website content and extract business/brand information:\n\nURL: ${url}\n\n---WEBSITE CONTENT START---\n${websiteText}\n---WEBSITE CONTENT END---\n\nReturn a JSON object with the extracted information.`,
+      prompt: `Analyze this website content and extract business/brand information:\n\nURL: ${url}\n${structuredBlock}\n---WEBSITE CONTENT START---\n${combinedText}\n---WEBSITE CONTENT END---\n\nReturn a JSON object with the extracted information.`,
       // GLM-5.3 reasons before answering and reasoning tokens count toward
       // this cap; 2000 left too little headroom for the JSON on real sites.
       maxTokens: 4096,
@@ -287,9 +552,11 @@ export async function analyzeWebsite(
     }
 
     const validated: WebsiteAnalysisResult = {
-      brand_name: asText(analysis.brand_name),
+      // Deterministic facts the site already publishes are a safe fallback
+      // when the model's own extraction misses — never an override of it.
+      brand_name: asText(analysis.brand_name) ?? structured.jsonLdOrgName ?? structured.ogSiteName,
       industry: asText(analysis.industry),
-      description: asText(analysis.description),
+      description: asText(analysis.description) ?? structured.jsonLdOrgDescription ?? structured.metaDescription ?? structured.ogDescription,
       audience: asText(analysis.audience),
       offers: asText(analysis.offers),
       tone: asText(analysis.tone),
@@ -320,4 +587,4 @@ export async function analyzeWebsite(
   }
 }
 
-export { isUnsafeUrl, redactSecrets };
+export { isUnsafeUrl, redactSecrets, extractStructuredSignals, discoverCandidateLinks };

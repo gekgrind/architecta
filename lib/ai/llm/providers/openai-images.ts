@@ -1,5 +1,15 @@
 import "server-only";
 
+import { isAllowedImageModel, isPaidAiDisabled } from "../policy";
+
+/** Image generation is OpenAI-only; it is switched off in AI test mode. */
+export class ImageGenerationUnavailableError extends Error {
+  constructor(message = "Image generation is not available in AI test mode") {
+    super(message);
+    this.name = "ImageGenerationUnavailableError";
+  }
+}
+
 export type ImageSize = "1024x1024" | "1024x1536" | "1536x1024" | "auto";
 export type ImageQuality = "low" | "medium" | "high" | "auto";
 
@@ -38,10 +48,14 @@ function parseDimensions(size: ImageSize): { width: number | null; height: numbe
 export async function generateImage(
   input: GenerateImageInput
 ): Promise<GenerateImageResult> {
+  // Checked before anything else: test mode must never reach OpenAI.
+  if (isPaidAiDisabled()) throw new ImageGenerationUnavailableError();
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
 
   const model = input.model || "gpt-image-1";
+  if (!isAllowedImageModel(model)) throw new Error("Unsupported image model");
   const size: ImageSize = input.size ?? "1024x1024";
   const quality: ImageQuality = input.quality ?? "high";
 

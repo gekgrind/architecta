@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { CONNECTIONS_TABLE, getDecryptedTokens, type ConnectionRow } from "./connections";
+import { composePostText } from "./post-text";
 import { getAdapter } from "./registry";
 import {
   PublishAuthError,
@@ -76,17 +77,12 @@ function logEvent(event: string, fields: Record<string, unknown>) {
   console.error(JSON.stringify({ scope: "publishing", event, ...fields }));
 }
 
-/** Assemble the post's fields into a single body of text to publish. */
+/**
+ * Assemble the post's fields into a single body of text to publish. Shares its
+ * composition with the Generate editor so saved edits publish verbatim.
+ */
 export function buildPostText(post: PostForPublish): string {
-  const segments: string[] = [];
-  if (post.hook) segments.push(post.hook);
-  const main = post.caption || post.body;
-  if (main) segments.push(main);
-  if (post.cta) segments.push(post.cta);
-  if (post.hashtags?.length) {
-    segments.push(post.hashtags.map((h) => `#${h.replace(/^#/, "")}`).join(" "));
-  }
-  return segments.filter(Boolean).join("\n\n").trim();
+  return composePostText(post).trim();
 }
 
 async function resolveAssetUrl(
@@ -204,7 +200,7 @@ export async function claimPost(
   trigger: "manual" | "scheduled",
   claimedAt: string = new Date().toISOString()
 ): Promise<boolean> {
-  const { data, error } = await supabase
+  let claim = supabase
     .from("architecta_posts")
     .update({
       status: "publishing",
@@ -216,8 +212,11 @@ export async function claimPost(
     })
     .eq("user_id", post.user_id)
     .eq("id", post.id)
-    .in("status", trigger === "manual" ? MANUAL_CLAIMABLE : CRON_CLAIMABLE)
-    .select("id");
+    .in("status", trigger === "manual" ? MANUAL_CLAIMABLE : CRON_CLAIMABLE);
+  // Re-check the due time at claim: a post rescheduled after the cron scan
+  // picked it up must not go out at its old time.
+  if (trigger === "scheduled") claim = claim.lte("scheduled_for", claimedAt);
+  const { data, error } = await claim.select("id");
   if (error) throw new Error(`Failed to claim post: ${error.message}`);
   return (data?.length ?? 0) > 0;
 }

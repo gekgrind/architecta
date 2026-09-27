@@ -1,4 +1,5 @@
 import type { LlmClient, LlmMessage, LlmResult } from "../types";
+import { httpError, postJson, requireApiKey } from "./http";
 
 type AnthropicMessageResponse = {
   content?: Array<
@@ -36,37 +37,31 @@ export function createAnthropicClient(): LlmClient {
   return {
     provider: "anthropic",
     async generate(input) {
-      const apiKey = process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY");
+      const apiKey = requireApiKey("anthropic", "ANTHROPIC_API_KEY");
 
       const started = Date.now();
 
       const { system, messages } = toAnthropicMessages(input.messages);
 
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
+      const { res, json: body } = await postJson("anthropic", "https://api.anthropic.com/v1/messages", {
         headers: {
           "x-api-key": apiKey,
           "anthropic-version": "2023-06-01",
           "content-type": "application/json",
         },
-        body: JSON.stringify({
+        body: {
           model: input.model,
           system: system || undefined,
           messages,
           temperature: input.temperature ?? 0.7,
           max_tokens: input.maxTokens ?? 1200,
-        }),
+        },
       });
 
-      const json = (await res.json()) as AnthropicMessageResponse;
+      const json = body as AnthropicMessageResponse;
 
       if (!res.ok) {
-        const err = Object.assign(new Error(json.error?.message || "Anthropic error"), {
-          status: res.status,
-          raw: json,
-        });
-        throw err;
+        throw httpError("anthropic", res.status, json.error?.message || "Anthropic error", json);
       }
 
       const text = (json.content ?? [])

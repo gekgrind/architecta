@@ -6,7 +6,7 @@ import {
 } from "@/lib/ai/llm/prompts/strategy";
 import { apiError, apiOk, parseJsonBody } from "@/lib/api/response";
 import { getAuthenticatedUser } from "@/lib/auth/server";
-import { enforceRateLimit, RATE_LIMITS } from "@/lib/ratelimit";
+import { enforceAiUsage, RATE_LIMITS } from "@/lib/ratelimit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { strategyGenerateInputSchema } from "@/lib/validation/strategy";
 
@@ -97,7 +97,7 @@ export async function POST(req: Request) {
   const session = await getAuthenticatedUser(supabase);
   if (!session) return apiError("unauthorized", "Unauthorized");
 
-  const limited = await enforceRateLimit(session.user.id, RATE_LIMITS.strategyGenerate);
+  const limited = await enforceAiUsage(session.user.id, RATE_LIMITS.strategyGenerate);
   if (limited) return limited;
 
   const body = await parseJsonBody<unknown>(req);

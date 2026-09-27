@@ -22,7 +22,7 @@ type SettingsRow = {
 };
 
 const DEFAULTS = {
-  text_provider: "anthropic" as const,
+  text_provider: "auto" as const,
   anthropic_model: "claude-sonnet-4-6",
   openai_text_model: "gpt-4o",
   openai_image_model: "gpt-image-1",

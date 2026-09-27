@@ -28,7 +28,6 @@ vi.mock("@/lib/publishing/registry", () => ({
     getAccountIdentity: h.getAccountIdentity,
   }),
 }));
-vi.mock("../start/route", () => ({ STATE_COOKIE: "arch_oauth_state" }));
 
 import { GET } from "./route";
 
@@ -58,6 +57,9 @@ describe("GET /api/connections/[platform]/callback", () => {
     expect(res.headers.get("location")).toContain("result=connected");
     expect(h.upsertConnection).toHaveBeenCalledOnce();
     expect(logged).toBe("");
+    // Must match the cookie the start route sets.
+    expect(h.cookieGet).toHaveBeenCalledWith("arch_oauth_state");
+    expect(h.cookieDelete).toHaveBeenCalledWith("arch_oauth_state");
   });
 
   it("logs the failing stage and status, without secrets, when token exchange fails", async () => {

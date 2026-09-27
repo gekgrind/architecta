@@ -158,7 +158,6 @@ export async function loadOnboardingContext() {
 
   const hasExistingContext = !!(
     shared?.industry ||
-    shared?.name ||
     shared?.website_url ||
     shared?.audience ||
     shared?.offer ||

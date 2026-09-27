@@ -7,6 +7,7 @@ import StepNavigation from "@/components/onboarding/StepNavigation";
 import ChoiceCard from "@/components/onboarding/ChoiceCard";
 import { getPreviousStepUrl } from "@/lib/onboarding/steps";
 import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
+import { inferToneOptionId } from "@/lib/onboarding/website-step-flow";
 
 type VoiceStepProps = {
   answers: OnboardingAnswers;
@@ -27,9 +28,10 @@ export default function VoiceStep({ answers }: VoiceStepProps) {
   const [error, setError] = useState<string | null>(null);
 
   const wa = answers.website_analysis;
+  const inferredTone = inferToneOptionId(wa?.tone, wa?.voice_characteristics);
 
   const [tone, setTone] = useState(
-    answers.voice_tone ?? ""
+    answers.voice_tone ?? inferredTone ?? ""
   );
 
   const [wordsToUse, setWordsToUse] = useState(
@@ -88,7 +90,10 @@ export default function VoiceStep({ answers }: VoiceStepProps) {
       {wa?.tone && !answers.voice_tone && (
         <div className="bp-notice">
           <p>
-            Based on your website, your tone appears to be: <strong>{wa.tone}</strong>
+            {inferredTone
+              ? "We pre-selected a tone below based on your website. Change it if it doesn't feel right."
+              : "Based on your website, your tone appears to be:"}{" "}
+            <strong>{wa.tone}</strong>
             {wa.voice_characteristics ? ` — ${wa.voice_characteristics}` : ""}
           </p>
         </div>

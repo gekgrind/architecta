@@ -10,6 +10,8 @@ export default defineConfig({
       { find: /^server-only$/, replacement: resolve(__dirname, "test/server-only-stub.ts") },
     ],
   },
+  // Match Next's automatic JSX runtime so components can be rendered in tests.
+  esbuild: { jsx: "automatic" },
   test: {
     environment: "node",
     include: ["**/*.test.ts"],

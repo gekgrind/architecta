@@ -1,3 +1,4 @@
+import { LlmProviderError } from "../errors";
 import type { LlmClient, LlmMessage, LlmResult } from "../types";
 
 // NVIDIA Build / NIM exposes an OpenAI-compatible chat completions API.
@@ -50,7 +51,12 @@ export function createNvidiaClient(): LlmClient {
     provider: "nvidia",
     async generate(input) {
       const apiKey = process.env.NVIDIA_API_KEY;
-      if (!apiKey) throw new Error("Missing NVIDIA_API_KEY");
+      if (!apiKey) {
+        throw new LlmProviderError("Missing NVIDIA_API_KEY", {
+          category: "configuration",
+          provider: "nvidia",
+        });
+      }
 
       const started = Date.now();
 

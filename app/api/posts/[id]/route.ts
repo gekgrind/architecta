@@ -60,9 +60,11 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     .eq("user_id", session.user.id)
     .eq("id", id)
     .select("*")
-    .single();
+    .maybeSingle();
 
   if (error) return apiError("server_error", error.message);
+  // No row matched this user + id: never report an edit that wasn't persisted.
+  if (!data) return apiError("not_found", "Post not found");
 
   return apiOk({ post: data });
 }

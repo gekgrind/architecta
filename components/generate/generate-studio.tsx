@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ControlsPanel } from "./panels/controls-panel";
 import { PreviewPanel } from "./panels/preview-panel";
 import { ActionsPanel } from "./panels/actions-panel";
+import { matchesSavedPost, savePostContent, type SavedPost } from "./save-post-content";
+import { composePostText } from "@/lib/publishing/post-text";
 import type { GenerationUIConfig, ContentType } from "@/lib/types";
 
 const initialConfig: GenerationUIConfig = {
@@ -30,24 +32,6 @@ function toPlatform(contentType: ContentType): string {
   return PLATFORM_BY_CONTENT_TYPE[contentType] ?? "linkedin";
 }
 
-function formatGeneratedPost(post: {
-  hook: string | null;
-  caption: string | null;
-  body: string | null;
-  cta: string | null;
-  hashtags: string[];
-}): string {
-  const segments: string[] = [];
-  if (post.hook) segments.push(post.hook);
-  const body = post.caption || post.body;
-  if (body) segments.push(body);
-  if (post.cta) segments.push(post.cta);
-  if (post.hashtags?.length) {
-    segments.push(post.hashtags.map((h) => `#${h.replace(/^#/, "")}`).join(" "));
-  }
-  return segments.filter(Boolean).join("\n\n");
-}
-
 export function GenerateStudio() {
   const [config, setConfig] = useState<GenerationUIConfig>(initialConfig);
   const [generatedContent, setGeneratedContent] = useState("");
@@ -55,6 +39,11 @@ export function GenerateStudio() {
   const [contentScore, setContentScore] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [postId, setPostId] = useState<string | null>(null);
+  // Last server-confirmed state of the post; the editor is "saved" only when it matches.
+  const [savedPost, setSavedPost] = useState<SavedPost | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSucceeded, setSaveSucceeded] = useState(false);
+  const activePostIdRef = useRef<string | null>(null);
 
   const updateConfig = (data: Partial<GenerationUIConfig>) => {
     setConfig((prev) => ({ ...prev, ...data }));
@@ -67,6 +56,7 @@ export function GenerateStudio() {
     setGeneratedContent("");
     setContentScore(null);
     setError(null);
+    setSaveSucceeded(false);
 
     try {
       const res = await fetch("/api/posts", {
@@ -105,8 +95,10 @@ export function GenerateStudio() {
         throw new Error(json?.error?.message ?? `Generation failed (${res.status})`);
       }
 
+      activePostIdRef.current = json.data.post.id;
       setPostId(json.data.post.id);
-      setGeneratedContent(formatGeneratedPost(json.data.post));
+      setSavedPost(json.data.post);
+      setGeneratedContent(composePostText(json.data.post));
       setContentScore(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Generation failed";
@@ -122,6 +114,33 @@ export function GenerateStudio() {
 
   const handleContentChange = (content: string) => {
     setGeneratedContent(content);
+    setSaveSucceeded(false);
+  };
+
+  const handleSave = async () => {
+    if (!postId || !savedPost || isSaving) return;
+
+    setIsSaving(true);
+    setSaveSucceeded(false);
+    setError(null);
+
+    const result = await savePostContent({
+      postId,
+      content: generatedContent,
+      saved: savedPost,
+    });
+
+    setIsSaving(false);
+    // A regenerate while the save was in flight replaced the post — drop the stale result.
+    if (activePostIdRef.current !== postId) return;
+
+    if (result.ok) {
+      setSavedPost(result.post);
+      setSaveSucceeded(true);
+    } else {
+      // Keep the local edit; it is still unsaved and the user can retry.
+      setError(`Your edits were not saved: ${result.error}. Try Save again.`);
+    }
   };
 
   return (
@@ -151,6 +170,9 @@ export function GenerateStudio() {
         contentScore={contentScore}
         content={generatedContent}
         postId={postId ?? undefined}
+        onSave={handleSave}
+        isSaving={isSaving}
+        isSaved={saveSucceeded && matchesSavedPost(generatedContent, savedPost)}
         visualPrompt={
           config.topic.trim()
             ? `${config.topic.trim()}\n\n${generatedContent}`.trim()
