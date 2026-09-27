@@ -7,7 +7,7 @@ import StepNavigation from "@/components/onboarding/StepNavigation";
 import ChoiceCard from "@/components/onboarding/ChoiceCard";
 import { getPreviousStepUrl } from "@/lib/onboarding/steps";
 import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
-import { matchWebsiteValuesToOptions } from "@/lib/onboarding/website-step-flow";
+import { initialStepValue, websiteValueSuggestions } from "@/lib/onboarding/website-step-flow";
 
 type FoundationStepProps = {
   answers: OnboardingAnswers;
@@ -31,10 +31,11 @@ export default function FoundationStep({ answers }: FoundationStepProps) {
   const [error, setError] = useState<string | null>(null);
 
   const wa = answers.website_analysis;
-  const suggestedValues = matchWebsiteValuesToOptions(wa?.values, VALUE_OPTIONS);
+  // Same confidence gate as the other steps: a "low" analysis never pre-selects.
+  const suggestedValues = websiteValueSuggestions(wa, VALUE_OPTIONS);
 
   const [values, setValues] = useState<string[]>(
-    answers.brand_values ?? suggestedValues
+    initialStepValue(answers.brand_values, suggestedValues, [])
   );
 
   const [boldness, setBoldness] = useState(

@@ -2,9 +2,8 @@ import "server-only";
 
 import { runGateway } from "@/lib/ai/llm/run";
 import { extractJson } from "@/lib/ai/llm/json";
-import { aiUsageDeniedMessage, checkAiUsage, RATE_LIMITS } from "@/lib/ratelimit";
+import { AiGatewayError, classifyLlmError, type LlmErrorCategory } from "@/lib/ai/llm/errors";
 import type { WebsiteAnalysisResult } from "./persistence";
-import { WEBSITE_ANALYSIS_FAILED_MESSAGE } from "./website-step-flow";
 
 /* =======================================================
    SSRF Protection
@@ -324,6 +323,10 @@ const VALUE_PAGE_KEYWORDS: { key: string; pattern: RegExp }[] = [
   { key: "faq", pattern: /\bfaq\b|frequently[-\s]?asked/i },
 ];
 
+// Legal boilerplate is never brand evidence, and "Terms of Service" would
+// otherwise match the "services" keyword.
+const LEGAL_PAGE_PATTERN = /\bterms\b|\bprivacy\b|\bcookies?\b|\blegal\b|\bdisclaimer\b/i;
+
 type PageCandidate = { key: string; url: string };
 
 function normalizeUrlForDedup(url: string): string {
@@ -380,6 +383,7 @@ function discoverCandidateLinks(html: string, baseUrl: string): PageCandidate[] 
 
     const linkText = match[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     const haystack = `${linkText} ${resolved.pathname}`.toLowerCase();
+    if (LEGAL_PAGE_PATTERN.test(haystack)) continue;
 
     for (const { key, pattern } of VALUE_PAGE_KEYWORDS) {
       if (seenKeys.has(key)) continue;
@@ -467,13 +471,28 @@ Return a JSON object with these fields:
 
 Only include fields where you have reasonable evidence. Set confidence based on how much useful information the website provided.`;
 
-export async function analyzeWebsite(
-  userId: string,
+/* =======================================================
+   A. Preparation (synchronous, in the onboarding request)
+
+   URL validation, SSRF checks, fetching, extraction, structured signals and
+   bounded page discovery. No model call happens here, so the user only waits
+   for the website itself.
+======================================================= */
+
+export type WebsiteAnalysisEvidence = {
+  /** URL as submitted by the user. */
+  url: string;
+  /** Machine-readable facts block (may be empty). */
+  structuredBlock: string;
+  /** Homepage + secondary page text sent to the model. */
+  content: string;
+  /** Deterministic facts used only when the model's own extraction misses. */
+  fallback: { brand_name?: string; description?: string };
+};
+
+export async function prepareWebsiteAnalysis(
   url: string
-): Promise<
-  | { ok: true; analysis: WebsiteAnalysisResult }
-  | { ok: false; error: string }
-> {
+): Promise<{ ok: true; evidence: WebsiteAnalysisEvidence } | { ok: false; error: string }> {
   const fetchResult = await fetchWebsiteContent(url);
 
   if (!fetchResult.ok) {
@@ -499,7 +518,10 @@ export async function analyzeWebsite(
     const pageText = htmlToText(outcome.value.text, Math.min(SECONDARY_PAGE_CHAR_CAP, remainingBudget));
     if (!pageText) continue;
 
-    secondarySections.push(`\n\n=== ${candidates[i].key.toUpperCase()} PAGE (${candidates[i].url}) ===\n${pageText}`);
+    secondarySections.push(`
+
+=== ${candidates[i].key.toUpperCase()} PAGE (${candidates[i].url}) ===
+${pageText}`);
     remainingBudget -= pageText.length;
   }
 
@@ -509,39 +531,81 @@ export async function analyzeWebsite(
     return { ok: false, error: websiteUnreadable("not enough readable text on the page") };
   }
 
-  const structuredBlock = buildStructuredDataBlock(structured);
+  return {
+    ok: true,
+    evidence: {
+      url,
+      structuredBlock: buildStructuredDataBlock(structured),
+      content: combinedText,
+      fallback: {
+        brand_name: structured.jsonLdOrgName ?? structured.ogSiteName,
+        description: structured.jsonLdOrgDescription ?? structured.metaDescription ?? structured.ogDescription,
+      },
+    },
+  };
+}
 
-  // Per-user AI limit + daily budget, checked right before the model call.
-  const allowance = await checkAiUsage(userId, RATE_LIMITS.websiteAnalysis);
-  if (!allowance.allowed) {
-    return { ok: false, error: aiUsageDeniedMessage(allowance) };
-  }
+/* =======================================================
+   B. Execution (background job)
 
+   One model call through the AI gateway (NVIDIA z-ai/glm-5.3, low reasoning),
+   then JSON extraction and validation. Returns a failure category instead of
+   a message so the job can decide whether another attempt could succeed.
+======================================================= */
+
+/** `parse`: the model answered but not with a usable JSON object. */
+export type WebsiteAnalysisFailure = LlmErrorCategory | "parse";
+
+export async function executeWebsiteAnalysis(
+  userId: string,
+  evidence: WebsiteAnalysisEvidence,
+  options: { background?: boolean } = {}
+): Promise<
+  | { ok: true; analysis: WebsiteAnalysisResult; model: string }
+  | { ok: false; category: WebsiteAnalysisFailure }
+> {
   let modelText: string;
+  let model: string;
   try {
     const result = await runGateway({
       userId,
       task: "WEBSITE_ANALYSIS",
       tier: "draft",
       systemPrompt: ANALYSIS_SYSTEM_PROMPT,
-      prompt: `Analyze this website content and extract business/brand information:\n\nURL: ${url}\n${structuredBlock}\n---WEBSITE CONTENT START---\n${combinedText}\n---WEBSITE CONTENT END---\n\nReturn a JSON object with the extracted information.`,
+      prompt: `Analyze this website content and extract business/brand information:
+
+URL: ${evidence.url}
+${evidence.structuredBlock}
+---WEBSITE CONTENT START---
+${evidence.content}
+---WEBSITE CONTENT END---
+
+Return a JSON object with the extracted information.`,
       // GLM-5.3 reasons before answering and reasoning tokens count toward
       // this cap; 2000 left too little headroom for the JSON on real sites.
       maxTokens: 4096,
       temperature: 0.2,
+      // Default reasoning (~1.5k tokens at ~20 tok/s on NVIDIA) routinely ran
+      // past the 90s provider timeout; extraction doesn't need it (~15s).
+      reasoningEffort: "low",
+      background: options.background,
     });
     modelText = result.text;
+    model = result.model;
   } catch (err) {
     const status =
       typeof err === "object" && err !== null && "status" in err
         ? (err as { status?: unknown }).status
         : undefined;
     const message = err instanceof Error ? err.message : "unknown error";
+    // The gateway throws AiGatewayError with the final attempt's category.
+    const category = err instanceof AiGatewayError ? err.category : classifyLlmError(err);
     console.error("[website-analysis] model call failed", {
       status,
+      category,
       message: redactSecrets(message),
     });
-    return { ok: false, error: WEBSITE_ANALYSIS_FAILED_MESSAGE };
+    return { ok: false, category };
   }
 
   try {
@@ -554,9 +618,9 @@ export async function analyzeWebsite(
     const validated: WebsiteAnalysisResult = {
       // Deterministic facts the site already publishes are a safe fallback
       // when the model's own extraction misses — never an override of it.
-      brand_name: asText(analysis.brand_name) ?? structured.jsonLdOrgName ?? structured.ogSiteName,
+      brand_name: asText(analysis.brand_name) ?? evidence.fallback.brand_name,
       industry: asText(analysis.industry),
-      description: asText(analysis.description) ?? structured.jsonLdOrgDescription ?? structured.metaDescription ?? structured.ogDescription,
+      description: asText(analysis.description) ?? evidence.fallback.description,
       audience: asText(analysis.audience),
       offers: asText(analysis.offers),
       tone: asText(analysis.tone),
@@ -577,13 +641,13 @@ export async function analyzeWebsite(
       analyzed_at: new Date().toISOString(),
     };
 
-    return { ok: true, analysis: validated };
+    return { ok: true, analysis: validated, model };
   } catch (err) {
     console.error("[website-analysis] could not parse model output", {
       reason: err instanceof Error ? err.message : "unknown",
       outputLength: modelText.length,
     });
-    return { ok: false, error: WEBSITE_ANALYSIS_FAILED_MESSAGE };
+    return { ok: false, category: "parse" };
   }
 }
 

@@ -46,6 +46,8 @@ export type RunGatewayArgs = {
   systemPrompt?: string;
   maxTokens?: number;
   temperature?: number;
+  reasoningEffort?: LlmGenerateInput["reasoningEffort"];
+  background?: boolean;
   preference?: LlmPreference;
   metadata?: Record<string, string | number | boolean | null>;
 };
@@ -74,6 +76,8 @@ export async function runGateway(args: RunGatewayArgs): Promise<LlmResult> {
     messages,
     maxTokens: args.maxTokens,
     temperature: args.temperature,
+    reasoningEffort: args.reasoningEffort,
+    background: args.background,
     preference: args.preference,
     metadata: args.metadata,
   };

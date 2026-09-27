@@ -1,9 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { createFakeWebsiteAnalysisTable } from "@/test/onboarding/fake-website-analysis-table";
+
 /**
- * End-to-end website-analysis path with only the network and database
- * mocked: runWebsiteAnalysis → analyzeWebsite → runGateway → router →
- * NVIDIA client. No live API calls are made.
+ * Website-analysis path with only the network and database mocked:
+ *
+ *   runWebsiteAnalysis → enqueueWebsiteAnalysis → prepareWebsiteAnalysis
+ *   (fetch/extract, synchronous)  ··· after() ···  processWebsiteAnalysisJob →
+ *   executeWebsiteAnalysis → runGateway → router → NVIDIA client
+ *
+ * No live API calls are made.
  */
 
 const h = vi.hoisted(() => ({
@@ -13,15 +19,26 @@ const h = vi.hoisted(() => ({
   updateOnboardingStep: vi.fn(),
   saveOnboardingProgress: vi.fn(),
   rateLimitRpc: vi.fn(),
+  jobs: null as null | { from: (table: string) => unknown },
+  afterCallbacks: [] as Array<() => Promise<unknown> | unknown>,
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: h.createSupabaseServerClient,
 }));
 vi.mock("@/lib/supabase/service", () => ({
-  createSupabaseServiceClient: vi.fn(async () => ({ rpc: h.rateLimitRpc })),
+  createSupabaseServiceClient: vi.fn(async () => ({
+    rpc: h.rateLimitRpc,
+    from: (table: string) => h.jobs!.from(table),
+  })),
 }));
 vi.mock("@/lib/ai/llm/usage/logger", () => ({ logLlmCall: h.logLlmCall }));
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/server")>()),
+  after: (cb: () => unknown) => {
+    h.afterCallbacks.push(cb);
+  },
+}));
 vi.mock("./server", () => ({
   getOrCreateArchitectaOnboarding: h.getOrCreateArchitectaOnboarding,
   updateOnboardingStep: h.updateOnboardingStep,
@@ -36,8 +53,7 @@ vi.mock("./persistence", () => ({
 }));
 
 import { runWebsiteAnalysis } from "./actions";
-import { analyzeWebsite, redactSecrets } from "./website-analysis";
-import { WEBSITE_ANALYSIS_FAILED_MESSAGE } from "./website-step-flow";
+import { executeWebsiteAnalysis, prepareWebsiteAnalysis, redactSecrets } from "./website-analysis";
 
 const USER_ID = "user-test-123";
 const SITE_URL = "https://acme.example.com";
@@ -74,7 +90,8 @@ function nvidiaContent(content: string) {
 }
 
 const fetchMock = vi.fn();
-let nvidiaReply: () => Response;
+let nvidiaReply: () => Response | Promise<Response>;
+let jobs: ReturnType<typeof createFakeWebsiteAnalysisTable>;
 
 function mockSupabase({ user = { id: USER_ID } as { id: string } | null } = {}) {
   const builder = {
@@ -107,6 +124,18 @@ function nvidiaCalls() {
   return fetchMock.mock.calls.filter(([url]) => String(url) === NVIDIA_URL);
 }
 
+/** Preparation + one execution, as the background job runs them. */
+async function analyze(url = SITE_URL) {
+  const prepared = await prepareWebsiteAnalysis(url);
+  if (!prepared.ok) return prepared;
+  return executeWebsiteAnalysis(USER_ID, prepared.evidence, { background: true });
+}
+
+async function runAfterCallbacks() {
+  const pending = h.afterCallbacks.splice(0);
+  for (const cb of pending) await cb();
+}
+
 beforeEach(() => {
   vi.stubEnv("NVIDIA_API_KEY", FAKE_NVIDIA_KEY);
   vi.stubGlobal("fetch", fetchMock);
@@ -117,12 +146,16 @@ beforeEach(() => {
     return new Response("unexpected outbound call", { status: 500 });
   });
   mockSupabase();
+  jobs = createFakeWebsiteAnalysisTable();
+  h.jobs = jobs;
+  h.afterCallbacks.length = 0;
   h.getOrCreateArchitectaOnboarding.mockResolvedValue({ session: { id: "sess-1" } });
   h.saveOnboardingProgress.mockResolvedValue({ ok: true });
   h.rateLimitRpc.mockResolvedValue({
     data: [{ allowed: true, remaining: 4, reset_at: null }],
     error: null,
   });
+  nvidiaReply = () => nvidiaContent('{"brand_name": "Acme", "confidence": "high"}');
 });
 
 afterEach(() => {
@@ -132,10 +165,10 @@ afterEach(() => {
 });
 
 /* =======================================================
-   Success path
+   Background execution: NVIDIA success
 ======================================================= */
 
-describe("runWebsiteAnalysis — NVIDIA success", () => {
+describe("executeWebsiteAnalysis — NVIDIA success", () => {
   const MODEL_OUTPUT = `<think>The site is about content systems.</think>
 Here is the analysis:
 \`\`\`json
@@ -158,12 +191,13 @@ Here is the analysis:
     nvidiaReply = () => nvidiaContent(MODEL_OUTPUT);
   });
 
-  it("analyzes the site via NVIDIA z-ai/glm-5.3 and persists the result", async () => {
-    const result = await runWebsiteAnalysis(SITE_URL);
+  it("analyzes the site via NVIDIA z-ai/glm-5.3 and returns the validated result", async () => {
+    const result = await analyze();
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok || !("analysis" in result)) return;
 
+    expect(result.model).toBe("z-ai/glm-5.3");
     expect(result.analysis).toMatchObject({
       brand_name: "Acme Growth Studio",
       industry: "B2B marketing services",
@@ -177,17 +211,10 @@ Here is the analysis:
     });
     expect(result.analysis.mission).toBeUndefined();
     expect(typeof result.analysis.analyzed_at).toBe("string");
-
-    // Persisted to onboarding_sessions.answers exactly as downstream steps read it.
-    expect(h.saveOnboardingProgress).toHaveBeenCalledWith(
-      "sess-1",
-      { website_analysis: result.analysis },
-      "website"
-    );
   });
 
   it("sends the existing analysis prompt to NVIDIA with the right model and key", async () => {
-    await runWebsiteAnalysis(SITE_URL);
+    await analyze();
 
     const calls = nvidiaCalls();
     expect(calls).toHaveLength(1);
@@ -204,49 +231,55 @@ Here is the analysis:
     expect(body.messages[1].content).toContain("Acme Growth Studio");
   });
 
-  it("makes no OpenAI (or other provider) calls, even when the user pinned OpenAI", async () => {
-    await runWebsiteAnalysis(SITE_URL);
+  // Regression: with default reasoning GLM-5.3 took ~100s on real sites and
+  // hit the 90s provider timeout, surfacing the generic failure in onboarding.
+  it("requests low reasoning effort so the call finishes within the provider timeout", async () => {
+    await analyze();
 
+    const body = JSON.parse(nvidiaCalls()[0][1].body);
+    expect(body.reasoning_effort).toBe("low");
+  });
+
+  it("makes no OpenAI (or other provider) calls and needs no OPENAI_API_KEY, even when the user pinned OpenAI", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+
+    const result = await analyze();
+
+    expect(result.ok).toBe(true);
     const urls = calledUrls();
     expect(urls.some((u) => u.includes("api.openai.com"))).toBe(false);
     expect(urls.some((u) => u.includes("api.anthropic.com"))).toBe(false);
     expect(urls).toEqual([SITE_URL, NVIDIA_URL]);
   });
 
-  it("records usage against the nvidia provider", async () => {
-    await runWebsiteAnalysis(SITE_URL);
+  it("records usage against the nvidia provider as a background call for the job's user", async () => {
+    await analyze();
 
     expect(h.logLlmCall).toHaveBeenCalledTimes(1);
-    expect(h.logLlmCall.mock.calls[0][0].result).toMatchObject({
-      provider: "nvidia",
-      model: "z-ai/glm-5.3",
-      usedFallback: false,
-    });
+    const logged = h.logLlmCall.mock.calls[0][0];
+    expect(logged.result).toMatchObject({ provider: "nvidia", model: "z-ai/glm-5.3", usedFallback: false });
+    expect(logged.input).toMatchObject({ userId: USER_ID, background: true });
   });
 });
 
 /* =======================================================
-   Bounded secondary page discovery (end-to-end)
+   Preparation: bounded secondary page discovery
 ======================================================= */
 
-describe("runWebsiteAnalysis — secondary page discovery", () => {
+describe("prepareWebsiteAnalysis — secondary page discovery", () => {
   const ABOUT_URL = `${SITE_URL}/about`;
   const PRICING_URL = `${SITE_URL}/pricing`;
 
   const HOMEPAGE_WITH_LINKS = `<html><head><title>Acme Growth Studio</title>
 <meta name="description" content="Acme helps B2B founders build repeatable content systems."></head>
 <body><h1>Build a growth engine</h1><p>Acme Growth Studio designs content systems for bootstrapped SaaS founders.</p>
-<nav><a href="/about">About us</a><a href="/pricing">Pricing</a></nav>
+<nav><a href="/about">About us</a><a href="/pricing">Pricing</a><a href="/terms">Terms of Service</a></nav>
 <p>Book a strategy call today.</p></body></html>`;
 
   const ABOUT_HTML = `<html><body><h1>Our story</h1><p>Founded in 2021 to help SaaS founders skip the growth-marketing guesswork.</p>
 <a href="/careers">Careers</a></body></html>`;
 
-  beforeEach(() => {
-    nvidiaReply = () => nvidiaContent('{"brand_name": "Acme Growth Studio", "confidence": "high"}');
-  });
-
-  it("fetches same-origin About/Pricing pages linked from the homepage and includes them in one model call", async () => {
+  it("fetches same-origin About/Pricing pages (never legal pages) and makes one model call for all of them", async () => {
     fetchMock.mockImplementation(async (input: string | URL) => {
       const url = String(input);
       if (url === SITE_URL) return htmlResponse(HOMEPAGE_WITH_LINKS, url);
@@ -256,7 +289,7 @@ describe("runWebsiteAnalysis — secondary page discovery", () => {
       return new Response("unexpected outbound call", { status: 500 });
     });
 
-    const result = await runWebsiteAnalysis(SITE_URL);
+    const result = await analyze();
 
     expect(result.ok).toBe(true);
     expect(calledUrls().sort()).toEqual([ABOUT_URL, NVIDIA_URL, PRICING_URL, SITE_URL].sort());
@@ -267,27 +300,24 @@ describe("runWebsiteAnalysis — secondary page discovery", () => {
     expect(prompt).toContain("Founded in 2021");
     expect(prompt).toContain("PRICING PAGE");
     expect(prompt).toContain("Starter plan");
-    // Still exactly one model call for however many pages were combined.
     expect(nvidiaCalls()).toHaveLength(1);
   });
 
-  it("falls back to homepage-only analysis when a secondary page fails, without failing the whole analysis", async () => {
+  it("falls back to homepage-only evidence when a secondary page fails", async () => {
     fetchMock.mockImplementation(async (input: string | URL) => {
       const url = String(input);
       if (url === SITE_URL) return htmlResponse(HOMEPAGE_WITH_LINKS, url);
       if (url === ABOUT_URL) return htmlResponse(ABOUT_HTML, url);
       if (url === PRICING_URL) return new Response("not found", { status: 404 });
-      if (url === NVIDIA_URL) return nvidiaReply();
       return new Response("unexpected outbound call", { status: 500 });
     });
 
-    const result = await runWebsiteAnalysis(SITE_URL);
+    const prepared = await prepareWebsiteAnalysis(SITE_URL);
 
-    expect(result.ok).toBe(true);
-    const body = JSON.parse(nvidiaCalls()[0][1].body);
-    const prompt: string = body.messages[1].content;
-    expect(prompt).toContain("ABOUT PAGE");
-    expect(prompt).not.toContain("PRICING PAGE");
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    expect(prepared.evidence.content).toContain("ABOUT PAGE");
+    expect(prepared.evidence.content).not.toContain("PRICING PAGE");
   });
 
   it("still succeeds homepage-only when every secondary page fetch fails", async () => {
@@ -296,15 +326,14 @@ describe("runWebsiteAnalysis — secondary page discovery", () => {
       const url = String(input);
       if (url === SITE_URL) return htmlResponse(HOMEPAGE_WITH_LINKS, url);
       if (url === ABOUT_URL || url === PRICING_URL) throw new TypeError("fetch failed");
-      if (url === NVIDIA_URL) return nvidiaReply();
       return new Response("unexpected outbound call", { status: 500 });
     });
 
-    const result = await runWebsiteAnalysis(SITE_URL);
+    const prepared = await prepareWebsiteAnalysis(SITE_URL);
 
-    expect(result.ok).toBe(true);
-    const body = JSON.parse(nvidiaCalls()[0][1].body);
-    expect(body.messages[1].content).toContain("Build a growth engine");
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    expect(prepared.evidence.content).toContain("Build a growth engine");
   });
 
   it("does not recurse into links found on a secondary page", async () => {
@@ -314,11 +343,10 @@ describe("runWebsiteAnalysis — secondary page discovery", () => {
       // ABOUT_HTML itself links to /careers — that must never be fetched.
       if (url === ABOUT_URL) return htmlResponse(ABOUT_HTML, url);
       if (url === PRICING_URL) return htmlResponse("<html><body>Pricing</body></html>", url);
-      if (url === NVIDIA_URL) return nvidiaReply();
       return new Response("unexpected outbound call", { status: 500 });
     });
 
-    await runWebsiteAnalysis(SITE_URL);
+    await prepareWebsiteAnalysis(SITE_URL);
 
     expect(calledUrls()).not.toContain(`${SITE_URL}/careers`);
   });
@@ -332,15 +360,22 @@ describe("runWebsiteAnalysis — secondary page discovery", () => {
         return htmlResponse(ABOUT_HTML, "http://169.254.169.254/about");
       }
       if (url === PRICING_URL) return htmlResponse("<html><body>Pricing info</body></html>", url);
-      if (url === NVIDIA_URL) return nvidiaReply();
       return new Response("unexpected outbound call", { status: 500 });
     });
 
-    const result = await runWebsiteAnalysis(SITE_URL);
+    const prepared = await prepareWebsiteAnalysis(SITE_URL);
 
-    expect(result.ok).toBe(true);
-    const body = JSON.parse(nvidiaCalls()[0][1].body);
-    expect(body.messages[1].content).not.toContain("Founded in 2021");
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    expect(prepared.evidence.content).not.toContain("Founded in 2021");
+  });
+
+  it("rejects private/metadata URLs before any fetch", async () => {
+    for (const url of ["http://169.254.169.254/latest/meta-data", "http://localhost:3000", "http://10.0.0.5"]) {
+      const prepared = await prepareWebsiteAnalysis(url);
+      expect(prepared.ok).toBe(false);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("uses JSON-LD/OpenGraph facts as a fallback when the model's own extraction misses them", async () => {
@@ -355,10 +390,10 @@ describe("runWebsiteAnalysis — secondary page discovery", () => {
       return new Response("unexpected outbound call", { status: 500 });
     });
 
-    const result = await runWebsiteAnalysis(SITE_URL);
+    const result = await analyze();
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok || !("analysis" in result)) return;
     expect(result.analysis.brand_name).toBe("Acme Growth Studio");
     expect(result.analysis.description).toBe("Content systems for SaaS founders.");
   });
@@ -375,10 +410,10 @@ describe("runWebsiteAnalysis — secondary page discovery", () => {
       return new Response("unexpected outbound call", { status: 500 });
     });
 
-    const result = await runWebsiteAnalysis(SITE_URL);
+    const result = await analyze();
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok || !("analysis" in result)) return;
     expect(result.analysis.brand_name).toBe("Model-Extracted Name");
   });
 });
@@ -387,14 +422,14 @@ describe("runWebsiteAnalysis — secondary page discovery", () => {
    Structured output resilience
 ======================================================= */
 
-describe("analyzeWebsite — output parsing", () => {
+describe("executeWebsiteAnalysis — output parsing", () => {
   it("accepts bare JSON with missing optional fields without inventing data", async () => {
     nvidiaReply = () => nvidiaContent('{"brand_name": "Acme"}');
 
-    const result = await analyzeWebsite(USER_ID, SITE_URL);
+    const result = await analyze();
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok || !("analysis" in result)) return;
     expect(result.analysis.brand_name).toBe("Acme");
     expect(result.analysis.industry).toBeUndefined();
     expect(result.analysis.topics).toBeUndefined();
@@ -405,59 +440,35 @@ describe("analyzeWebsite — output parsing", () => {
     nvidiaReply = () =>
       nvidiaContent('{"brand_name": "Acme", "offers": ["Content system design", "Strategy calls", 7]}');
 
-    const result = await analyzeWebsite(USER_ID, SITE_URL);
+    const result = await analyze();
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok || !("analysis" in result)) return;
     expect(result.analysis.offers).toBe("Content system design; Strategy calls");
   });
 
-  it("returns the safe message when the reply is truncated mid-JSON", async () => {
-    nvidiaReply = () =>
+  it.each([
+    ["the reply is truncated mid-JSON", () =>
       nvidiaResponse({
         choices: [{ message: { content: '```json\n{"brand_name": "Acme", "descr' }, finish_reason: "length" }],
-      });
+      })],
+    ["the JSON is malformed", () => nvidiaContent('{"brand_name": "Acme", "industry": ')],
+    ["the model returns no JSON object", () => nvidiaContent("<think>thinking…</think>")],
+    ["the model returns a JSON array", () => nvidiaContent('["Acme"]')],
+  ])("reports a retryable parse failure when %s", async (_label, reply) => {
+    nvidiaReply = reply;
     vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const result = await analyzeWebsite(USER_ID, SITE_URL);
-
-    expect(result).toEqual({ ok: false, error: WEBSITE_ANALYSIS_FAILED_MESSAGE });
-  });
-
-  it("returns the safe message for malformed JSON", async () => {
-    nvidiaReply = () => nvidiaContent('{"brand_name": "Acme", "industry": ');
-    vi.spyOn(console, "error").mockImplementation(() => {});
-
-    const result = await analyzeWebsite(USER_ID, SITE_URL);
-
-    expect(result).toEqual({ ok: false, error: WEBSITE_ANALYSIS_FAILED_MESSAGE });
-  });
-
-  it("returns the safe message when the model returns no JSON object", async () => {
-    nvidiaReply = () => nvidiaContent("<think>thinking…</think>");
-    vi.spyOn(console, "error").mockImplementation(() => {});
-
-    const result = await analyzeWebsite(USER_ID, SITE_URL);
-
-    expect(result).toEqual({ ok: false, error: WEBSITE_ANALYSIS_FAILED_MESSAGE });
-  });
-
-  it("rejects a JSON array instead of an object", async () => {
-    nvidiaReply = () => nvidiaContent('["Acme"]');
-    vi.spyOn(console, "error").mockImplementation(() => {});
-
-    const result = await analyzeWebsite(USER_ID, SITE_URL);
-
-    expect(result).toEqual({ ok: false, error: WEBSITE_ANALYSIS_FAILED_MESSAGE });
+    expect(await analyze()).toEqual({ ok: false, category: "parse" });
   });
 });
 
 /* =======================================================
-   Provider failure sanitization
+   Provider failure classification + sanitization
 ======================================================= */
 
-describe("runWebsiteAnalysis — NVIDIA failure", () => {
-  it("returns a UI-safe error and never leaks keys or provider text", async () => {
+describe("executeWebsiteAnalysis — NVIDIA failure", () => {
+  it("classifies auth failures as permanent and never leaks keys or provider text", async () => {
     nvidiaReply = () =>
       nvidiaResponse(
         {
@@ -468,17 +479,12 @@ describe("runWebsiteAnalysis — NVIDIA failure", () => {
         401
       );
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const result = await runWebsiteAnalysis(SITE_URL);
+    const result = await analyze();
 
-    expect(result).toEqual({ ok: false, error: WEBSITE_ANALYSIS_FAILED_MESSAGE });
+    expect(result).toEqual({ ok: false, category: "authentication" });
 
-    const serialized = JSON.stringify(result);
-    for (const secret of [LEAKED_OPENAI_KEY, FAKE_NVIDIA_KEY, "sk-proj", "nvapi-", "Incorrect API key"]) {
-      expect(serialized).not.toContain(secret);
-    }
-
-    // Server log is useful for debugging but scrubbed.
     const logged = JSON.stringify(consoleError.mock.calls);
     expect(logged).toContain("401");
     expect(logged).not.toContain(LEAKED_OPENAI_KEY);
@@ -487,40 +493,139 @@ describe("runWebsiteAnalysis — NVIDIA failure", () => {
     // Auth failures are not retried and do not fall back to another provider.
     expect(nvidiaCalls()).toHaveLength(1);
     expect(calledUrls().some((u) => u.includes("api.openai.com"))).toBe(false);
-    expect(h.saveOnboardingProgress).not.toHaveBeenCalled();
   });
 
-  it("returns a UI-safe error when NVIDIA_API_KEY is not configured", async () => {
+  it("classifies a missing NVIDIA_API_KEY as a configuration failure", async () => {
     vi.stubEnv("NVIDIA_API_KEY", "");
     vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const result = await runWebsiteAnalysis(SITE_URL);
-
-    expect(result).toEqual({ ok: false, error: WEBSITE_ANALYSIS_FAILED_MESSAGE });
+    expect(await analyze()).toEqual({ ok: false, category: "configuration" });
     expect(calledUrls().some((u) => u.includes("api.openai.com"))).toBe(false);
   });
 
-  it("returns a UI-safe error when persisting the analysis fails", async () => {
-    nvidiaReply = () => nvidiaContent('{"brand_name": "Acme"}');
-    h.saveOnboardingProgress.mockResolvedValue({ ok: false, error: "db down" });
+  it("classifies a provider timeout as a (retryable) timeout", async () => {
+    nvidiaReply = () => nvidiaResponse({ error: "timed out" }, 408);
     vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(await analyze()).toEqual({ ok: false, category: "timeout" });
+  });
+
+  it("classifies an NVIDIA 429 as rate_limit", async () => {
+    nvidiaReply = () => nvidiaResponse({ error: "Too Many Requests" }, 429);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(await analyze()).toEqual({ ok: false, category: "rate_limit" });
+  });
+
+  it("reports unreachable sites during preparation, without calling the model", async () => {
+    fetchMock.mockImplementation(async () => {
+      throw new TypeError("fetch failed");
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await prepareWebsiteAnalysis(SITE_URL);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain("We couldn't read your website");
+    expect(result.error).toContain("continue manually");
+    expect(nvidiaCalls()).toHaveLength(0);
+  });
+});
+
+/* =======================================================
+   Onboarding action: enqueue, don't wait for the model
+======================================================= */
+
+describe("runWebsiteAnalysis — background enqueue", () => {
+  it("returns as soon as the site is read and queued, without waiting for GLM", async () => {
+    // The model never answers: the action must still resolve.
+    nvidiaReply = () => new Promise<Response>(() => {});
 
     const result = await runWebsiteAnalysis(SITE_URL);
 
-    expect(result).toEqual({ ok: false, error: WEBSITE_ANALYSIS_FAILED_MESSAGE });
+    expect(result).toEqual({ ok: true, status: "queued" });
+    expect(nvidiaCalls()).toHaveLength(0);
+    expect(jobs.only()).toMatchObject({ session_id: "sess-1", user_id: USER_ID, status: "queued" });
+    // Only the fast-path trigger is scheduled; nothing ran inside the request.
+    expect(h.afterCallbacks).toHaveLength(1);
   });
 
-  it("returns a UI-safe error on unexpected exceptions", async () => {
-    nvidiaReply = () => nvidiaContent('{"brand_name": "Acme"}');
-    h.getOrCreateArchitectaOnboarding.mockRejectedValue(new Error("boom: internal detail"));
+  it("runs exactly one model attempt in the after() fast path and stores the result in the job only", async () => {
+    await runWebsiteAnalysis(SITE_URL);
+    await runAfterCallbacks();
+
+    expect(nvidiaCalls()).toHaveLength(1);
+    expect(jobs.only()).toMatchObject({ status: "completed", attempts: 1, model: "z-ai/glm-5.3" });
+    expect((jobs.only().result as { brand_name: string }).brand_name).toBe("Acme");
+    // The worker never writes onboarding answers.
+    expect(h.saveOnboardingProgress).not.toHaveBeenCalled();
+  });
+
+  it("persists a retry for the cron when the fast-path attempt times out (no in-process retry)", async () => {
+    nvidiaReply = () => nvidiaResponse({ error: "timed out" }, 408);
     vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await runWebsiteAnalysis(SITE_URL);
+    await runAfterCallbacks();
+
+    expect(nvidiaCalls()).toHaveLength(1);
+    expect(jobs.only()).toMatchObject({ status: "queued", attempts: 1, error_code: "timeout" });
+  });
+
+  it("does not queue or run a second analysis when the same URL is submitted again", async () => {
+    await runWebsiteAnalysis(SITE_URL);
+    const second = await runWebsiteAnalysis(`${SITE_URL}/`);
+
+    expect(second).toEqual({ ok: true, status: "queued" });
+    expect(jobs.rows.size).toBe(1);
+    // Re-arming the fast path is harmless: the atomic claim admits one worker.
+    await runAfterCallbacks();
+    expect(nvidiaCalls()).toHaveLength(1);
+    expect(h.rateLimitRpc).toHaveBeenCalledTimes(2); // one per-action + one daily check, once
+  });
+
+  it("checks the per-user website-analysis limit and daily budget when queueing", async () => {
+    await runWebsiteAnalysis(SITE_URL);
+
+    const keys = h.rateLimitRpc.mock.calls.map(([, args]) => args.p_key);
+    expect(keys[0]).toBe(`onboarding.website_analysis:${USER_ID}`);
+    expect(keys[1]).toMatch(new RegExp(`^ai\\.daily\\.\\d{4}-\\d{2}-\\d{2}:${USER_ID}$`));
+  });
+
+  it("returns a rate-limit message and queues nothing when the limit is hit", async () => {
+    h.rateLimitRpc.mockResolvedValue({
+      data: [{ allowed: false, remaining: 0, reset_at: null }],
+      error: null,
+    });
 
     const result = await runWebsiteAnalysis(SITE_URL);
 
-    expect(result).toEqual({ ok: false, error: WEBSITE_ANALYSIS_FAILED_MESSAGE });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/too quickly/i);
+    expect(jobs.rows.size).toBe(0);
+    expect(h.afterCallbacks).toHaveLength(0);
   });
 
-  it("reports unreachable sites without calling the model", async () => {
+  it("fails closed (nothing queued) when the limiter itself errors", async () => {
+    h.rateLimitRpc.mockResolvedValue({ data: null, error: { message: "db down" } });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = await runWebsiteAnalysis(SITE_URL);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/temporarily unavailable/i);
+    expect(jobs.rows.size).toBe(0);
+  });
+
+  it("keeps the inline unreadable-site message and queues nothing", async () => {
     fetchMock.mockImplementation(async () => {
       throw new TypeError("fetch failed");
     });
@@ -531,8 +636,23 @@ describe("runWebsiteAnalysis — NVIDIA failure", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toContain("We couldn't read your website");
-    expect(result.error).toContain("continue manually");
-    expect(nvidiaCalls()).toHaveLength(0);
+    expect(jobs.rows.size).toBe(0);
+  });
+
+  it("fails safe with the manual-continue message when the job can't be created", async () => {
+    h.jobs = {
+      from: () => {
+        throw new Error('relation "architecta_website_analyses" does not exist');
+      },
+    };
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await runWebsiteAnalysis(SITE_URL);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "We couldn't analyze your website automatically. You can try again or continue manually.",
+    });
   });
 
   it("rejects unauthenticated callers before any network call", async () => {
@@ -542,48 +662,6 @@ describe("runWebsiteAnalysis — NVIDIA failure", () => {
 
     expect(result).toEqual({ ok: false, error: "Not authenticated" });
     expect(fetchMock).not.toHaveBeenCalled();
-  });
-});
-
-/* =======================================================
-   AI rate limit + daily budget
-======================================================= */
-
-describe("analyzeWebsite — AI usage limits", () => {
-  it("checks the per-user website-analysis limit and daily budget before the model", async () => {
-    nvidiaReply = () => nvidiaContent('{"brand_name": "Acme"}');
-
-    await analyzeWebsite(USER_ID, SITE_URL);
-
-    const keys = h.rateLimitRpc.mock.calls.map(([, args]) => args.p_key);
-    expect(keys[0]).toBe(`onboarding.website_analysis:${USER_ID}`);
-    expect(keys[1]).toMatch(new RegExp(`^ai\\.daily\\.\\d{4}-\\d{2}-\\d{2}:${USER_ID}$`));
-  });
-
-  it("returns a rate-limit message and never calls NVIDIA when the limit is hit", async () => {
-    h.rateLimitRpc.mockResolvedValue({
-      data: [{ allowed: false, remaining: 0, reset_at: null }],
-      error: null,
-    });
-
-    const result = await analyzeWebsite(USER_ID, SITE_URL);
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error).toMatch(/too quickly/i);
-    expect(nvidiaCalls()).toHaveLength(0);
-  });
-
-  it("fails closed when the limiter itself errors", async () => {
-    h.rateLimitRpc.mockResolvedValue({ data: null, error: { message: "db down" } });
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    const result = await analyzeWebsite(USER_ID, SITE_URL);
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error).toMatch(/temporarily unavailable/i);
-    expect(nvidiaCalls()).toHaveLength(0);
   });
 });
 
@@ -609,6 +687,7 @@ describe("website-analysis path has no OpenAI dependency", () => {
     const path = await import("path");
     const files = [
       path.resolve(__dirname, "./website-analysis.ts"),
+      path.resolve(__dirname, "./website-analysis-jobs.ts"),
       path.resolve(__dirname, "./website-step-flow.ts"),
       path.resolve(__dirname, "../ai/llm/providers/nvidia.ts"),
     ];

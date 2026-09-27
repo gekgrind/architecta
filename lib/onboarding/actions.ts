@@ -16,8 +16,18 @@ import {
   completeArchitectaOnboardingWithData,
   type OnboardingAnswers,
 } from "./persistence";
-import { analyzeWebsite } from "./website-analysis";
-import { WEBSITE_ANALYSIS_FAILED_MESSAGE } from "./website-step-flow";
+import { after } from "next/server";
+import {
+  enqueueWebsiteAnalysis,
+  getWebsiteAnalysisForSession,
+  processWebsiteAnalysisJob,
+} from "./website-analysis-jobs";
+import {
+  composeWebsiteAnalysis,
+  WEBSITE_ANALYSIS_FAILED_MESSAGE,
+  type WebsiteAnalysisStatus,
+} from "./website-step-flow";
+import type { WebsiteAnalysisResult } from "./persistence";
 
 const SAVE_FAILED_MESSAGE =
   "Something went wrong saving your answers. Please try again.";
@@ -151,10 +161,17 @@ export async function loadOnboardingContext() {
 
   const prefill = buildPrefillFromSharedContext(shared, brand);
 
-  const answers: OnboardingAnswers = {
-    ...prefill,
-    ...(session?.answers ?? {}),
-  };
+  // Background analysis is composed in at read time; it is never persisted
+  // into the session's answers.
+  const websiteAnalysis = session ? await getWebsiteAnalysisForSession(session.id) : null;
+
+  const answers: OnboardingAnswers = composeWebsiteAnalysis(
+    {
+      ...prefill,
+      ...(session?.answers ?? {}),
+    },
+    websiteAnalysis
+  );
 
   const hasExistingContext = !!(
     shared?.industry ||
@@ -180,6 +197,7 @@ export async function loadOnboardingContext() {
     hasExistingContext,
     hasWebsiteUrl,
     websiteUrl: answers.website_url ?? shared?.website_url ?? shared?.website ?? brand?.website ?? null,
+    websiteAnalysisStatus: websiteAnalysis?.status ?? null,
   };
 }
 
@@ -222,33 +240,64 @@ export async function runWebsiteAnalysis(url: string) {
   if (!user) return { ok: false as const, error: "Not authenticated" };
 
   try {
-    // analyzeWebsite returns only user-safe error strings.
-    const result = await analyzeWebsite(user.id, url);
-
-    if (!result.ok) {
-      return { ok: false as const, error: result.error };
-    }
-
     const { session } = await getOrCreateArchitectaOnboarding();
 
-    const saved = await saveOnboardingProgress(
-      session.id,
-      { website_analysis: result.analysis },
-      "website"
-    );
+    // Fetch/extract synchronously (fast), queue the model call. Errors
+    // returned here are user-safe (unreadable site, usage limits).
+    const queued = await enqueueWebsiteAnalysis({
+      userId: user.id,
+      sessionId: session.id,
+      url,
+    });
 
-    if (!saved.ok) {
-      console.error("[website-analysis] failed to persist analysis:", saved.error);
-      return { ok: false as const, error: WEBSITE_ANALYSIS_FAILED_MESSAGE };
+    if (!queued.ok) {
+      return { ok: false as const, error: queued.error };
     }
 
-    return { ok: true as const, analysis: result.analysis };
+    if (queued.status === "queued") {
+      // Fast path only: one model attempt after the response is sent. If this
+      // never runs (restart, deploy), the job stays queued/stale and the
+      // authenticated cron processor picks it up.
+      const jobId = queued.jobId;
+      try {
+        after(async () => {
+          try {
+            await processWebsiteAnalysisJob(jobId);
+          } catch (err) {
+            console.error("[website-analysis] background attempt failed:", err instanceof Error ? err.message : err);
+          }
+        });
+      } catch (err) {
+        console.warn("[website-analysis] could not schedule fast path; cron will process the job:", err instanceof Error ? err.message : err);
+      }
+    }
+
+    return { ok: true as const, status: queued.status };
   } catch (err) {
     console.error(
       "[website-analysis] unexpected failure:",
       err
     );
     return { ok: false as const, error: WEBSITE_ANALYSIS_FAILED_MESSAGE };
+  }
+}
+
+/* =======================================================
+   Website Analysis status (Snapshot polling)
+======================================================= */
+
+export async function getWebsiteAnalysisStatus(): Promise<{
+  status: WebsiteAnalysisStatus | null;
+  analysis: WebsiteAnalysisResult | null;
+}> {
+  try {
+    const session = await loadOnboardingSession();
+    if (!session) return { status: null, analysis: null };
+
+    const job = await getWebsiteAnalysisForSession(session.id);
+    return { status: job?.status ?? null, analysis: job?.result ?? null };
+  } catch {
+    return { status: null, analysis: null };
   }
 }
 
@@ -261,7 +310,12 @@ export async function completeOnboarding() {
     const session = await loadOnboardingSession();
     if (!session) return { ok: false as const, error: AUTH_EXPIRED_MESSAGE };
 
-    const result = await completeArchitectaOnboardingWithData(session.answers);
+    // A completed background analysis is composed in (read time), never
+    // written back into answers; user answers keep precedence downstream.
+    const websiteAnalysis = await getWebsiteAnalysisForSession(session.id);
+    const result = await completeArchitectaOnboardingWithData(
+      composeWebsiteAnalysis(session.answers, websiteAnalysis)
+    );
 
     if (!result.ok) {
       console.error("[completeOnboarding] completion failed:", result.error);

@@ -2,11 +2,19 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   analyzeWebsiteForStep,
+  composeWebsiteAnalysis,
   confidentWebsiteValue,
+  fillUntouchedEmptyFields,
   inferToneOptionId,
+  initialStepValue,
+  isWebsiteAnalysisPending,
   matchWebsiteValuesToOptions,
+  snapshotWebsiteSuggestions,
   WEBSITE_ANALYSIS_FAILED_MESSAGE,
+  websiteToneSuggestion,
+  websiteValueSuggestions,
 } from "./website-step-flow";
+import type { OnboardingAnswers, WebsiteAnalysisResult } from "./persistence";
 
 const VALUE_OPTIONS = [
   "Clarity",
@@ -153,5 +161,125 @@ describe("analyzeWebsiteForStep", () => {
     expect(WEBSITE_ANALYSIS_FAILED_MESSAGE).toBe(
       "We couldn't analyze your website automatically. You can try again or continue manually."
     );
+  });
+});
+
+/* =======================================================
+   Precedence + confidence (background analysis)
+======================================================= */
+
+function analysis(overrides: Partial<WebsiteAnalysisResult> = {}): WebsiteAnalysisResult {
+  return {
+    brand_name: "Acme Studio",
+    industry: "B2B SaaS",
+    description: "Content systems for founders",
+    tone: "Direct and practical",
+    voice_characteristics: "No-fluff",
+    values: "Clarity, Integrity",
+    confidence: "high",
+    analyzed_at: "2026-09-27T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+describe("initialStepValue", () => {
+  it("the user's (or saved shared/brand) answer wins over a website suggestion", () => {
+    expect(initialStepValue("My own name", "Acme Studio", "")).toBe("My own name");
+    expect(initialStepValue(["Trust"], ["Clarity"], [])).toEqual(["Trust"]);
+  });
+
+  it("an explicitly saved empty answer still wins — a late suggestion never replaces it", () => {
+    expect(initialStepValue("", "Acme Studio", "")).toBe("");
+  });
+
+  it("a confident website value fills an empty field, else the field stays empty", () => {
+    expect(initialStepValue(undefined, "Acme Studio", "")).toBe("Acme Studio");
+    expect(initialStepValue<string>(undefined, undefined, "")).toBe("");
+  });
+});
+
+describe("confidence-gated suggestions", () => {
+  it("Foundation: a low-confidence analysis does not pre-select values", () => {
+    expect(websiteValueSuggestions(analysis({ confidence: "low" }), VALUE_OPTIONS)).toEqual([]);
+    expect(websiteValueSuggestions(analysis({ confidence: "medium" }), VALUE_OPTIONS)).toEqual(["Clarity", "Integrity"]);
+  });
+
+  it("Voice: a low-confidence analysis does not pre-select a tone", () => {
+    expect(websiteToneSuggestion(analysis({ confidence: "low" }))).toBeUndefined();
+    expect(websiteToneSuggestion(analysis({ confidence: "high" }))).toBe("direct");
+  });
+
+  it("Snapshot: a low-confidence analysis suggests nothing", () => {
+    expect(snapshotWebsiteSuggestions(analysis({ confidence: "low" }))).toEqual({
+      brandName: undefined,
+      industry: undefined,
+      description: undefined,
+    });
+  });
+
+  it("no analysis yet suggests nothing", () => {
+    expect(websiteValueSuggestions(undefined, VALUE_OPTIONS)).toEqual([]);
+    expect(websiteToneSuggestion(null)).toBeUndefined();
+  });
+});
+
+describe("fillUntouchedEmptyFields (Snapshot live result)", () => {
+  const untouched = { brandName: false, industry: false, description: false };
+  const suggestions = snapshotWebsiteSuggestions(analysis());
+
+  it("fills only fields that are still empty and untouched", () => {
+    const next = fillUntouchedEmptyFields(
+      { brandName: "", industry: "Coaching", description: "" },
+      untouched,
+      suggestions
+    );
+    expect(next).toEqual({
+      brandName: "Acme Studio",
+      industry: "Coaching",
+      description: "Content systems for founders",
+    });
+  });
+
+  it("never replaces typed text, and never refills a field the user cleared", () => {
+    const next = fillUntouchedEmptyFields(
+      { brandName: "Typed name", industry: "", description: "" },
+      { brandName: true, industry: true, description: false },
+      suggestions
+    );
+    expect(next).toEqual({ brandName: "Typed name", industry: "", description: "Content systems for founders" });
+  });
+
+  it("does nothing with a low-confidence result", () => {
+    const empty = { brandName: "", industry: "", description: "" };
+    expect(fillUntouchedEmptyFields(empty, untouched, snapshotWebsiteSuggestions(analysis({ confidence: "low" })))).toEqual(empty);
+  });
+});
+
+describe("composeWebsiteAnalysis (read-time)", () => {
+  it("exposes a completed job result as answers.website_analysis without mutating answers", () => {
+    const answers: OnboardingAnswers = { brand_name: "Mine" };
+    const composed = composeWebsiteAnalysis(answers, { status: "completed", result: analysis() });
+
+    expect(composed.website_analysis?.brand_name).toBe("Acme Studio");
+    expect(composed.brand_name).toBe("Mine");
+    expect(answers).toEqual({ brand_name: "Mine" });
+  });
+
+  it("ignores pending/failed jobs and keeps an older inline analysis as a fallback", () => {
+    const legacy = analysis({ brand_name: "Legacy" });
+    const empty: OnboardingAnswers = {};
+    expect(composeWebsiteAnalysis<OnboardingAnswers>({ website_analysis: legacy }, { status: "processing", result: null }).website_analysis).toBe(legacy);
+    expect(composeWebsiteAnalysis(empty, { status: "failed", result: null }).website_analysis).toBeUndefined();
+    expect(composeWebsiteAnalysis(empty, null).website_analysis).toBeUndefined();
+  });
+});
+
+describe("isWebsiteAnalysisPending", () => {
+  it("polls only while queued or processing", () => {
+    expect(isWebsiteAnalysisPending("queued")).toBe(true);
+    expect(isWebsiteAnalysisPending("processing")).toBe(true);
+    expect(isWebsiteAnalysisPending("completed")).toBe(false);
+    expect(isWebsiteAnalysisPending("failed")).toBe(false);
+    expect(isWebsiteAnalysisPending(null)).toBe(false);
   });
 });

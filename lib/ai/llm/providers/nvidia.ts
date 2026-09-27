@@ -73,6 +73,7 @@ export function createNvidiaClient(): LlmClient {
             messages: toNvidiaMessages(input.messages),
             temperature: input.temperature ?? 0.7,
             max_tokens: input.maxTokens ?? 1200,
+            ...(input.reasoningEffort ? { reasoning_effort: input.reasoningEffort } : {}),
             stream: false,
           }),
           signal: AbortSignal.timeout(NVIDIA_TIMEOUT_MS),

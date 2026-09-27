@@ -61,6 +61,7 @@ describe("createNvidiaClient", () => {
     expect(body.temperature).toBe(0.2);
     expect(body.max_tokens).toBe(2000);
     expect(body.messages).toEqual(baseInput.messages);
+    expect(body).not.toHaveProperty("reasoning_effort");
 
     expect(result).toMatchObject({
       provider: "nvidia",
@@ -68,6 +69,15 @@ describe("createNvidiaClient", () => {
       text: "ok",
       usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
     });
+  });
+
+  it("forwards reasoning effort as reasoning_effort when requested", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ choices: [{ message: { content: "ok" } }] }));
+
+    await createNvidiaClient().generate({ ...baseInput, reasoningEffort: "low" });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.reasoning_effort).toBe("low");
   });
 
   it("strips inline <think> reasoning from the content", async () => {

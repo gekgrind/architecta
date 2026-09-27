@@ -40,6 +40,7 @@ export default async function OnboardingStepPage({ params }: Props) {
         sessionId: ctx.session?.id ?? session.id,
         hasExistingContext: ctx.hasExistingContext,
         websiteUrl: ctx.websiteUrl,
+        websiteAnalysisStatus: ctx.websiteAnalysisStatus,
       }}
     />
   );

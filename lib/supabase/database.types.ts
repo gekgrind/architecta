@@ -551,6 +551,74 @@ export type Database = {
         }
         Relationships: []
       }
+      architecta_website_analyses: {
+        Row: {
+          attempts: number
+          claim_token: string | null
+          claimed_at: string | null
+          completed_at: string | null
+          created_at: string
+          error_code: string | null
+          evidence: string | null
+          id: string
+          input_hash: string
+          model: string | null
+          next_attempt_at: string
+          result: Json | null
+          session_id: string
+          status: string
+          updated_at: string
+          url: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          claim_token?: string | null
+          claimed_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          evidence?: string | null
+          id?: string
+          input_hash: string
+          model?: string | null
+          next_attempt_at?: string
+          result?: Json | null
+          session_id: string
+          status?: string
+          updated_at?: string
+          url: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          claim_token?: string | null
+          claimed_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          evidence?: string | null
+          id?: string
+          input_hash?: string
+          model?: string | null
+          next_attempt_at?: string
+          result?: Json | null
+          session_id?: string
+          status?: string
+          updated_at?: string
+          url?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "architecta_website_analyses_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: true
+            referencedRelation: "onboarding_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brand_profiles: {
         Row: {
           ai_preferences: Json | null

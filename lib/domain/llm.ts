@@ -43,6 +43,14 @@ export type LlmGenerateInput = {
   messages: LlmMessage[];
   maxTokens?: number;
   temperature?: number;
+  /** Reasoning budget for providers that support it (currently NVIDIA only). */
+  reasoningEffort?: "low" | "medium" | "high";
+  /**
+   * Server-side background job with no request session (cron / after()):
+   * usage is attributed to `userId` via the service role. Only set by server
+   * code for a job it owns — never from client input.
+   */
+  background?: boolean;
   preference?: LlmPreference;
   metadata?: Record<string, string | number | boolean | null>;
 };

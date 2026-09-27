@@ -40,10 +40,11 @@ describe("AI entry points", () => {
       const src = readFileSync(file, "utf-8");
       if (AI_CALL.test(src) && !GUARD.test(src)) unguarded.push(relative(ROOT, file));
     }
-    // Website analysis is reached via a server action in lib/onboarding/actions.ts
-    // and guards inside analyzeWebsite(), right before the model call.
-    const websiteAnalysis = readFileSync(join(ROOT, "lib/onboarding/website-analysis.ts"), "utf-8");
-    expect(GUARD.test(websiteAnalysis)).toBe(true);
+    // Website analysis is reached via a server action in lib/onboarding/actions.ts;
+    // the usage guard runs when the job is queued (enqueueWebsiteAnalysis), and
+    // the background model call is bounded by the job's attempt limit.
+    const websiteAnalysisJobs = readFileSync(join(ROOT, "lib/onboarding/website-analysis-jobs.ts"), "utf-8");
+    expect(GUARD.test(websiteAnalysisJobs)).toBe(true);
 
     expect(unguarded).toEqual([]);
   });

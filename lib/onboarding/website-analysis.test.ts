@@ -220,6 +220,17 @@ describe("discoverCandidateLinks", () => {
     expect(candidates).toHaveLength(1);
   });
 
+  it("skips legal pages, even when their text matches a category", () => {
+    const html = `
+      <a href="/terms">Terms of Service</a>
+      <a href="/privacy">Privacy Policy</a>
+      <a href="/legal/customers">Customer agreement</a>
+      <a href="/about">About</a>`;
+
+    const candidates = discoverCandidateLinks(html, BASE);
+    expect(candidates.map((c) => c.url)).toEqual(["https://acme.example.com/about"]);
+  });
+
   it("keeps only one link per category even if several match", () => {
     const html = `<a href="/pricing">Pricing</a><a href="/plans">Plans</a>`;
     const candidates = discoverCandidateLinks(html, BASE);
@@ -270,10 +281,12 @@ describe("discoverCandidateLinks", () => {
    Website Analysis Integration
 ======================================================= */
 
-describe("analyzeWebsite", () => {
-  it("is exported as a function", async () => {
-    const { analyzeWebsite } = await import("./website-analysis");
-    expect(typeof analyzeWebsite).toBe("function");
+describe("website analysis entry points", () => {
+  it("exports separate preparation (sync) and execution (background) steps", async () => {
+    const mod = await import("./website-analysis");
+    expect(typeof mod.prepareWebsiteAnalysis).toBe("function");
+    expect(typeof mod.executeWebsiteAnalysis).toBe("function");
+    expect("analyzeWebsite" in mod).toBe(false);
   });
 });
 

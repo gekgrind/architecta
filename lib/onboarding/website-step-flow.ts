@@ -98,6 +98,95 @@ export function matchWebsiteValuesToOptions(
   return matched.slice(0, maxMatches);
 }
 
+/* =======================================================
+   Confidence-gated website suggestions + precedence
+
+   Precedence for every step field:
+     saved answer (user's own, or shared/brand-profile prefill already
+     merged into answers) > confident website analysis > empty.
+   A "low" confidence analysis never auto-fills anything.
+======================================================= */
+
+/** First defined value wins: the saved answer always beats a website suggestion. */
+export function initialStepValue<T>(saved: T | undefined, suggestion: T | undefined, empty: T): T {
+  return saved ?? suggestion ?? empty;
+}
+
+/** Voice step tone option suggested by a confident analysis. */
+export function websiteToneSuggestion(wa: WebsiteAnalysisResult | null | undefined): string | undefined {
+  return inferToneOptionId(
+    confidentWebsiteValue(wa?.tone, wa?.confidence),
+    confidentWebsiteValue(wa?.voice_characteristics, wa?.confidence)
+  );
+}
+
+/** Foundation step value options suggested by a confident analysis. */
+export function websiteValueSuggestions(
+  wa: WebsiteAnalysisResult | null | undefined,
+  options: string[]
+): string[] {
+  return matchWebsiteValuesToOptions(confidentWebsiteValue(wa?.values, wa?.confidence), options);
+}
+
+export type SnapshotFields = { brandName: string; industry: string; description: string };
+
+/** Snapshot fields a confident analysis can suggest. */
+export function snapshotWebsiteSuggestions(
+  wa: WebsiteAnalysisResult | null | undefined
+): Partial<SnapshotFields> {
+  return {
+    brandName: confidentWebsiteValue(wa?.brand_name, wa?.confidence),
+    industry: confidentWebsiteValue(wa?.industry, wa?.confidence),
+    description: confidentWebsiteValue(wa?.description, wa?.confidence),
+  };
+}
+
+/**
+ * A late analysis result only fills a Snapshot field the user has neither
+ * touched nor filled. Typed (or cleared) text is never replaced.
+ */
+export function fillUntouchedEmptyFields(
+  current: SnapshotFields,
+  touched: Record<keyof SnapshotFields, boolean>,
+  suggestions: Partial<SnapshotFields>
+): SnapshotFields {
+  const next = { ...current };
+  for (const key of Object.keys(next) as (keyof SnapshotFields)[]) {
+    const suggestion = suggestions[key];
+    if (!touched[key] && next[key].trim() === "" && suggestion) next[key] = suggestion;
+  }
+  return next;
+}
+
+/* =======================================================
+   Background analysis: read-time composition + polling
+======================================================= */
+
+export type WebsiteAnalysisStatus = "queued" | "processing" | "completed" | "failed";
+
+/**
+ * Exposes a completed background analysis to steps as answers.website_analysis
+ * WITHOUT persisting it into the session's answers. The job table stays the
+ * source of truth; an older inline analysis in answers is kept as a fallback.
+ */
+export function composeWebsiteAnalysis<A extends { website_analysis?: WebsiteAnalysisResult | null }>(
+  answers: A,
+  job: { status: WebsiteAnalysisStatus; result: WebsiteAnalysisResult | null } | null
+): A {
+  if (job?.status === "completed" && job.result) {
+    return { ...answers, website_analysis: job.result };
+  }
+  return answers;
+}
+
+export const WEBSITE_ANALYSIS_POLL_INTERVAL_MS = 4_000;
+/** Covers the typical GLM attempt; later steps pick up anything slower at render. */
+export const WEBSITE_ANALYSIS_POLL_MAX_MS = 150_000;
+
+export function isWebsiteAnalysisPending(status: WebsiteAnalysisStatus | null | undefined): boolean {
+  return status === "queued" || status === "processing";
+}
+
 /**
  * Runs the website analysis server action and always resolves: a rejected
  * action (network drop, server crash) becomes a user-safe failure, and

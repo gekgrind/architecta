@@ -18,6 +18,8 @@ export type OnboardingContext = {
   sessionId: string;
   hasExistingContext: boolean;
   websiteUrl: string | null;
+  /** Background website analysis status; drives Snapshot's live fill. */
+  websiteAnalysisStatus?: "queued" | "processing" | "completed" | "failed" | null;
 };
 
 type Props = {
@@ -46,6 +48,7 @@ export default function StepRenderer({ step, context }: Props) {
           answers={context.answers}
           sessionId={context.sessionId}
           hasExistingContext={context.hasExistingContext}
+          websiteAnalysisStatus={context.websiteAnalysisStatus ?? null}
         />
       );
     case "market":

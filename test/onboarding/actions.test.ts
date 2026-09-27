@@ -29,13 +29,10 @@ vi.mock("@/lib/onboarding/persistence", () => ({
   buildPrefillFromSharedContext: vi.fn(() => ({})),
 }));
 
-vi.mock("@/lib/onboarding/website-analysis", () => ({
-  analyzeWebsite: vi.fn(),
-}));
-
-vi.mock("@/lib/onboarding/website-step-flow", () => ({
-  WEBSITE_ANALYSIS_FAILED_MESSAGE:
-    "We couldn't analyze your website automatically.",
+vi.mock("@/lib/onboarding/website-analysis-jobs", () => ({
+  enqueueWebsiteAnalysis: vi.fn(),
+  processWebsiteAnalysisJob: vi.fn(),
+  getWebsiteAnalysisForSession: vi.fn(async () => null),
 }));
 
 describe("saveStepAnswers", () => {

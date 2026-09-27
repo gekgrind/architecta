@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { createSupabaseRecorder, type QueryResult, type RecordedQuery } from "../onboarding/supabase-recorder";
+import { createFakeWebsiteAnalysisTable } from "../onboarding/fake-website-analysis-table";
 
 /**
  * Cross-workstream coverage for the launch-critical integration:
@@ -11,6 +12,8 @@ import { createSupabaseRecorder, type QueryResult, type RecordedQuery } from "..
  *   #9  Architecta-owned onboarding persistence (session completion,
  *       fill-empty shared facts, non-regressing current_step)
  *   #10 AI guardrails (NVIDIA-only test mode, rate limit + daily budget)
+ *   background website analysis (job table, after() fast path, read-time
+ *       composition — the worker never writes onboarding answers)
  *
  * Only the network (fetch), the Supabase clients, usage logging and the
  * Next.js navigation/header primitives are doubled. The real onboarding
@@ -22,13 +25,24 @@ const h = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
   rateLimitRpc: vi.fn(),
   logLlmCall: vi.fn(),
+  jobs: null as null | { from: (table: string) => unknown },
+  afterCallbacks: [] as Array<() => unknown>,
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: h.createSupabaseServerClient,
 }));
 vi.mock("@/lib/supabase/service", () => ({
-  createSupabaseServiceClient: vi.fn(async () => ({ rpc: h.rateLimitRpc })),
+  createSupabaseServiceClient: vi.fn(async () => ({
+    rpc: h.rateLimitRpc,
+    from: (table: string) => h.jobs!.from(table),
+  })),
+}));
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/server")>()),
+  after: (cb: () => unknown) => {
+    h.afterCallbacks.push(cb);
+  },
 }));
 vi.mock("@/lib/ai/llm/usage/logger", () => ({ logLlmCall: h.logLlmCall }));
 vi.mock("next/headers", () => ({
@@ -53,6 +67,7 @@ import {
 } from "@/lib/onboarding/actions";
 import { getArchitectaOnboardingStatus } from "@/lib/onboarding/server";
 import CustomersStep from "@/components/onboarding/CustomersStep";
+import FoundationStep from "@/components/onboarding/FoundationStep";
 import MarketStep from "@/components/onboarding/MarketStep";
 import SnapshotStep from "@/components/onboarding/SnapshotStep";
 import VoiceStep from "@/components/onboarding/VoiceStep";
@@ -128,7 +143,16 @@ type DbState = {
 
 const ok = (data: unknown): QueryResult => ({ data, error: null });
 
+/** Runs whatever after() scheduled — the background fast path. */
+async function runBackground() {
+  for (const cb of h.afterCallbacks.splice(0)) await cb();
+}
+
 function setupDb(sessionOverrides: Record<string, unknown> = {}) {
+  const jobs = createFakeWebsiteAnalysisTable();
+  h.jobs = jobs;
+  h.afterCallbacks.length = 0;
+
   const state: DbState = {
     profile: entrepreneuriaProfile(),
     session: {
@@ -159,6 +183,13 @@ function setupDb(sessionOverrides: Record<string, unknown> = {}) {
         update: apply(state.session),
       },
       brand_profiles: { select: () => ok({ ...state.brand }), upsert: apply(state.brand) },
+      // The user's own job, as RLS + column grants expose it (status/result only).
+      architecta_website_analyses: {
+        select: (q) => {
+          const row = [...jobs.rows.values()].find((r) => r.session_id === q.filters.session_id);
+          return ok(row ? { status: row.status, result: row.result } : null);
+        },
+      },
       // A historical settings row pinned to a paid provider must not
       // override NVIDIA-only mode.
       architecta_user_settings: {
@@ -174,7 +205,7 @@ function setupDb(sessionOverrides: Record<string, unknown> = {}) {
   });
 
   h.createSupabaseServerClient.mockResolvedValue(db.client);
-  return { db, state };
+  return { db, state, jobs };
 }
 
 /* =======================================================
@@ -264,11 +295,15 @@ describe("Existing Entrepreneuria user enters Architecta (Scenario A)", () => {
 
 describe("Website analysis under AI_TEST_PROVIDER=nvidia (Scenario B)", () => {
   it("analyzes via NVIDIA only, including a discovered same-origin page, under the AI limits", async () => {
-    const { state } = setupDb();
+    const { state, jobs } = setupDb();
 
     const result = await runWebsiteAnalysis(SITE_URL);
 
-    expect(result.ok).toBe(true);
+    // The request returns once the site is read and queued — before any model call.
+    expect(result).toEqual({ ok: true, status: "queued" });
+    expect(nvidiaCalls()).toHaveLength(0);
+
+    await runBackground();
 
     // One model call, on NVIDIA, carrying the #8 secondary-page evidence.
     expect(nvidiaCalls()).toHaveLength(1);
@@ -286,22 +321,26 @@ describe("Website analysis under AI_TEST_PROVIDER=nvidia (Scenario B)", () => {
     expect(keys).toContain(`onboarding.website_analysis:${USER_ID}`);
     expect(keys.some((k: string) => k.startsWith("ai.daily."))).toBe(true);
 
-    // #9: persisted on the Architecta session without rewinding progress.
-    const saved = state.session.answers as OnboardingAnswers;
-    expect(saved.website_analysis?.brand_name).toBe("Jordan Launch Lab");
+    // Stored on the job only — never written into the session's answers —
+    // and progress is not rewound.
+    expect(jobs.only()).toMatchObject({ status: "completed", attempts: 1 });
+    expect((jobs.only().result as OnboardingAnswers["website_analysis"])?.brand_name).toBe("Jordan Launch Lab");
+    expect((state.session.answers as OnboardingAnswers).website_analysis).toBeUndefined();
     expect(state.session.current_step).toBe("snapshot");
   });
 
   it("stops before the model when the AI limit is exhausted and leaves the session untouched", async () => {
-    const { db } = setupDb();
+    const { db, jobs } = setupDb();
     h.rateLimitRpc.mockResolvedValue({
       data: [{ allowed: false, remaining: 0, reset_at: null }],
       error: null,
     });
 
     const result = await runWebsiteAnalysis(SITE_URL);
+    await runBackground();
 
     expect(result.ok).toBe(false);
+    expect(jobs.rows.size).toBe(0);
     expect(nvidiaCalls()).toHaveLength(0);
     expect(paidProviderCalls()).toHaveLength(0);
     expect(db.writesTo("onboarding_sessions")).toHaveLength(0);
@@ -318,10 +357,11 @@ describe("Website analysis under AI_TEST_PROVIDER=nvidia (Scenario B)", () => {
     expect(nvidiaCalls()).toHaveLength(0);
   });
 
-  it("returns a controlled failure with no paid fallback when NVIDIA fails", async () => {
-    const { db } = setupDb();
+  it("keeps a failed NVIDIA attempt in the background: retry queued, no paid fallback, session untouched", async () => {
+    const { db, jobs } = setupDb();
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "info").mockImplementation(() => {});
     fetchMock.mockImplementation(async (input: string | URL) => {
       const url = String(input);
       if (url.startsWith(SITE_URL)) return htmlResponse(HOMEPAGE_HTML, url);
@@ -330,8 +370,11 @@ describe("Website analysis under AI_TEST_PROVIDER=nvidia (Scenario B)", () => {
     });
 
     const result = await runWebsiteAnalysis(SITE_URL);
+    await runBackground();
 
-    expect(result.ok).toBe(false);
+    // The user already moved on; the failure only schedules a cron retry.
+    expect(result).toEqual({ ok: true, status: "queued" });
+    expect(jobs.only()).toMatchObject({ status: "queued", attempts: 1, error_code: "provider" });
     expect(paidProviderCalls()).toHaveLength(0);
     expect(db.writesTo("onboarding_sessions")).toHaveLength(0);
   });
@@ -347,6 +390,7 @@ describe("Onboarding prefill priority across shared data and website intelligenc
     const env = setupDb();
     const result = await runWebsiteAnalysis(SITE_URL);
     expect(result.ok).toBe(true);
+    await runBackground();
     // Reload: everything below comes from persisted state only.
     const ctx = await loadOnboardingContext();
     return { ...env, ctx };
@@ -412,7 +456,93 @@ describe("Onboarding prefill priority across shared data and website intelligenc
     const answers = state.session.answers as OnboardingAnswers;
     expect(answers.brand_name).toBe("Jordan & Co");
     expect(answers.primary_market).toBe("Coaching");
-    expect(answers.website_analysis?.brand_name).toBe("Jordan Launch Lab");
+    // The analysis lives in the job table and is composed in on reload.
+    expect(answers.website_analysis).toBeUndefined();
+    expect((await loadOnboardingContext()).answers.website_analysis?.brand_name).toBe("Jordan Launch Lab");
+  });
+});
+
+/* =======================================================
+   Background analysis finishing after the user has answered
+======================================================= */
+
+describe("A late background result never overwrites user answers", () => {
+  it("answers saved while the analysis was still running win after it completes", async () => {
+    const { state } = setupDb();
+    await runWebsiteAnalysis(SITE_URL);
+
+    // The user answers Snapshot and Market before GLM finishes.
+    await saveStepAnswers(
+      { brand_name: "Jordan & Co", industry: "Founder coaching", description: "Launch intensives" },
+      "snapshot"
+    );
+    await saveStepAnswers({ primary_market: "Coaching" }, "market");
+    const answersBefore = structuredClone(state.session.answers);
+
+    await runBackground(); // analysis completes now
+
+    expect(state.session.answers).toEqual(answersBefore);
+    const ctx = await loadOnboardingContext();
+    expect(ctx.answers.website_analysis?.brand_name).toBe("Jordan Launch Lab");
+    expect(ctx.websiteAnalysisStatus).toBe("completed");
+
+    const snapshot = renderStep(SnapshotStep, ctx.answers);
+    expect(snapshot).toContain('value="Jordan &amp; Co"');
+    expect(snapshot).not.toContain('value="Jordan Launch Lab"');
+    const market = renderStep(MarketStep, ctx.answers);
+    expect(market).toContain('value="Coaching"');
+    expect(market).not.toContain('value="Business coaching"');
+  });
+
+  it("reports the pending status to the steps while the analysis runs", async () => {
+    setupDb();
+    await runWebsiteAnalysis(SITE_URL);
+
+    const ctx = await loadOnboardingContext();
+
+    expect(ctx.websiteAnalysisStatus).toBe("queued");
+    expect(ctx.answers.website_analysis).toBeUndefined();
+  });
+});
+
+describe("Low-confidence website analysis", () => {
+  it("does not pre-select Foundation values or a Voice tone", async () => {
+    const { jobs } = setupDb();
+    await runWebsiteAnalysis(SITE_URL);
+    await runBackground();
+    jobs.only().result = { ...(jobs.only().result as object), confidence: "low" };
+
+    const ctx = await loadOnboardingContext();
+    expect(ctx.answers.website_analysis?.confidence).toBe("low");
+
+    const foundation = renderStep(FoundationStep, ctx.answers);
+    expect(foundation).not.toContain("Pre-selected based on your website");
+    const voice = renderStep(VoiceStep, ctx.answers);
+    expect(voice).not.toContain("based on your website");
+    expect(voice).not.toContain("Direct and practical");
+  });
+
+  it("a confident analysis does pre-select them", async () => {
+    setupDb();
+    await runWebsiteAnalysis(SITE_URL);
+    await runBackground();
+
+    const ctx = await loadOnboardingContext();
+    expect(renderStep(FoundationStep, ctx.answers)).toContain("Pre-selected based on your website");
+    expect(renderStep(VoiceStep, ctx.answers)).toContain("We pre-selected a tone below based on your website");
+  });
+});
+
+describe("No-website path", () => {
+  it("continues without fetching, queueing or calling a model", async () => {
+    const { jobs } = setupDb({ current_step: "website" });
+
+    const result = await saveStepAnswers({ has_website: false }, "website");
+
+    expect(result).toEqual({ ok: true, next: "/onboarding/snapshot" });
+    expect(jobs.rows.size).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(h.afterCallbacks).toHaveLength(0);
   });
 });
 
@@ -424,6 +554,7 @@ describe("Completing Architecta onboarding after website analysis", () => {
   it("marks only the Architecta session complete and leaves shared completion/name state untouched", async () => {
     const { db, state } = setupDb();
     await runWebsiteAnalysis(SITE_URL);
+    await runBackground();
     await saveStepAnswers(
       { brand_name: "Jordan & Co", industry: "Founder coaching", description: "Launch intensives" },
       "snapshot"

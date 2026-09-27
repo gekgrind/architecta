@@ -7,7 +7,7 @@ import StepNavigation from "@/components/onboarding/StepNavigation";
 import ChoiceCard from "@/components/onboarding/ChoiceCard";
 import { getPreviousStepUrl } from "@/lib/onboarding/steps";
 import type { OnboardingAnswers } from "@/lib/onboarding/persistence";
-import { inferToneOptionId } from "@/lib/onboarding/website-step-flow";
+import { confidentWebsiteValue, initialStepValue, websiteToneSuggestion } from "@/lib/onboarding/website-step-flow";
 
 type VoiceStepProps = {
   answers: OnboardingAnswers;
@@ -28,10 +28,13 @@ export default function VoiceStep({ answers }: VoiceStepProps) {
   const [error, setError] = useState<string | null>(null);
 
   const wa = answers.website_analysis;
-  const inferredTone = inferToneOptionId(wa?.tone, wa?.voice_characteristics);
+  // Same confidence gate as the other steps: a "low" analysis neither
+  // pre-selects a tone nor is presented as a website suggestion.
+  const inferredTone = websiteToneSuggestion(wa);
+  const websiteTone = confidentWebsiteValue(wa?.tone, wa?.confidence);
 
   const [tone, setTone] = useState(
-    answers.voice_tone ?? inferredTone ?? ""
+    initialStepValue(answers.voice_tone, inferredTone, "")
   );
 
   const [wordsToUse, setWordsToUse] = useState(
@@ -87,14 +90,14 @@ export default function VoiceStep({ answers }: VoiceStepProps) {
 
   return (
     <div className="space-y-8">
-      {wa?.tone && !answers.voice_tone && (
+      {websiteTone && !answers.voice_tone && (
         <div className="bp-notice">
           <p>
             {inferredTone
               ? "We pre-selected a tone below based on your website. Change it if it doesn't feel right."
               : "Based on your website, your tone appears to be:"}{" "}
-            <strong>{wa.tone}</strong>
-            {wa.voice_characteristics ? ` — ${wa.voice_characteristics}` : ""}
+            <strong>{websiteTone}</strong>
+            {wa?.voice_characteristics ? ` — ${wa.voice_characteristics}` : ""}
           </p>
         </div>
       )}

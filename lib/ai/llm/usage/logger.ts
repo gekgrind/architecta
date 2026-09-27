@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import type { LlmGenerateInput, LlmResult } from "../types";
 import { estimateCostUSD } from "./cost";
 
@@ -19,16 +20,27 @@ export async function logLlmCall(args: {
   });
 
   try {
-    const supabase = await createSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return;
+    // Interactive calls attribute usage to the signed-in session user. Background
+    // jobs (cron / after()) have no session: server code that owns the job sets
+    // input.background, and usage is written for the job's user via the service role.
+    let supabase;
+    let userId: string;
+    if (args.input.background) {
+      if (!args.input.userId) return;
+      supabase = await createSupabaseServiceClient();
+      userId = args.input.userId;
+    } else {
+      supabase = await createSupabaseServerClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return;
+      }
+      userId = user.id;
     }
 
     const { error } = await supabase.from("architecta_llm_usage").insert({
-      user_id: user.id,
-      workspace_id: args.input.workspaceId === user.id ? null : args.input.workspaceId,
+      user_id: userId,
+      workspace_id: args.input.workspaceId === userId ? null : args.input.workspaceId,
       task: args.input.task,
       tier: args.input.tier ?? "standard",
       provider: args.result.provider,

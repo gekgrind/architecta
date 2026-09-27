@@ -44,7 +44,7 @@ export default function WebsiteStep({
         analyze: runWebsiteAnalysis,
         setAnalyzing: (value) => {
           setAnalyzing(value);
-          setAnalysisStatus(value ? "Analyzing your website…" : null);
+          setAnalysisStatus(value ? "Reading your website…" : null);
         },
       });
 
@@ -172,7 +172,7 @@ export default function WebsiteStep({
         }
         onContinue={handleAnalyzeAndContinue}
         continueLabel={hasWebsite ? "Analyze & continue" : "Continue"}
-        pendingLabel={analyzing ? "Analyzing website…" : "Saving…"}
+        pendingLabel={analyzing ? "Reading website…" : "Saving…"}
       />
     </div>
   );
