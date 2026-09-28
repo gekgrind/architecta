@@ -3,14 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
   Sparkles,
-  Library,
-  Target,
-  Palette,
-  BarChart3,
-  Search,
-  CalendarDays,
   ChevronDown,
   Settings,
   LogOut,
@@ -20,6 +13,7 @@ import {
 
 import { useAuthIdentity } from "@/hooks/use-auth-identity";
 import { buildSharedLoginHref } from "@/lib/auth/redirects";
+import { ARCHITECTA_NAV_ITEMS, isNavItemActive } from "@/lib/navigation/architecta-nav";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -39,16 +33,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/generate", label: "Generate", icon: Sparkles },
-  { href: "/library", label: "Library", icon: Library },
-  { href: "/campaigns", label: "Campaigns", icon: Target },
-  { href: "/calendar", label: "Calendar", icon: CalendarDays },
-  { href: "/brand-kit", label: "Brand Kit", icon: Palette },
-  { href: "/seo", label: "SEO Tools", icon: Search },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-];
+const navItems = ARCHITECTA_NAV_ITEMS;
 
 interface SidebarProps {
   className?: string;
@@ -72,9 +57,15 @@ export function Sidebar({ className }: SidebarProps) {
   const renderNav = (mode: "desktop" | "mobile") => (
     <nav className="flex-1 space-y-1 px-3 py-4" aria-label="Primary">
       {navItems.map((item) => {
-        const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const isActive = isNavItemActive(pathname, item);
         return (
-          <Link key={item.href} href={item.href} title={item.label} aria-label={item.label}>
+          <Link
+            key={item.href}
+            href={item.href}
+            title={item.label}
+            aria-label={item.label}
+            aria-current={isActive ? "page" : undefined}
+          >
             <Button
               variant="ghost"
               className={cn(

@@ -1,10 +1,27 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Bell, LayoutGrid, Search } from "lucide-react";
+import { LayoutGrid, Search } from "lucide-react";
 import Link from "next/link";
 
+import { CommandPalette } from "@/components/navigation/CommandPalette";
+
 export function DashboardTopBar() {
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   return (
     <motion.header
       initial={{ y: -20, opacity: 0 }}
@@ -24,36 +41,41 @@ export function DashboardTopBar() {
 
         <div className="relative mx-auto hidden max-w-2xl flex-1 group md:block">
           <div className="absolute inset-0 rounded-full bg-[#00D4FF]/5 opacity-0 blur-xl transition-opacity group-hover:opacity-100" />
-          <label className="relative flex items-center rounded-full border border-white/5 bg-[#041C3B]/50 px-5 py-2 transition-all group-hover:border-[#00D4FF]/30">
-            <Search className="h-4 w-4 text-[#BCC0D8]" />
-            <input
-              type="text"
-              aria-label="AI strategy search"
-              placeholder="Ask AI to architect a growth strategy..."
-              className="flex-1 border-none bg-transparent px-3 text-sm text-white outline-none placeholder:text-[#BCC0D8]/50"
-            />
-            <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            aria-haspopup="dialog"
+            aria-keyshortcuts="Control+K Meta+K"
+            className="relative flex w-full items-center rounded-full border border-white/5 bg-[#041C3B]/50 px-5 py-2 text-left outline-none transition-all group-hover:border-[#00D4FF]/30 focus-visible:border-[#00D4FF]/60 focus-visible:ring-2 focus-visible:ring-[#00D4FF]/30"
+          >
+            <Search className="h-4 w-4 text-[#BCC0D8]" aria-hidden="true" />
+            <span className="flex-1 px-3 text-sm text-[#BCC0D8]/50">
+              Jump to strategy, content, calendar…
+            </span>
+            <span className="flex gap-2" aria-hidden="true">
               <kbd className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-[#BCC0D8]">
                 Ctrl
               </kbd>
               <kbd className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-[#BCC0D8]">
                 K
               </kbd>
-            </div>
-          </label>
+            </span>
+          </button>
         </div>
 
-        <div className="ml-auto flex items-center gap-3 sm:gap-4">
+        <div className="ml-auto flex items-center gap-3 sm:gap-4 md:hidden">
           <button
             type="button"
-            aria-label="Notifications"
-            className="relative rounded-full p-2 transition-colors hover:bg-white/5"
+            aria-label="Jump to a workspace"
+            onClick={() => setPaletteOpen(true)}
+            className="rounded-full p-2 transition-colors hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00D4FF]/50"
           >
-            <Bell className="h-5 w-5 text-[#BCC0D8] transition-colors hover:text-white" />
-            <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-[#041C3B] bg-[#00D4FF] shadow-[0_0_5px_#00D4FF]" />
+            <Search className="h-5 w-5 text-[#BCC0D8]" aria-hidden="true" />
           </button>
         </div>
       </div>
+
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
     </motion.header>
   );
 }

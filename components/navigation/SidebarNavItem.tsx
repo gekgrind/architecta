@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { isExternalHref, isNavItemActive } from "@/lib/navigation/architecta-nav";
 import type { SidebarNavigationItem } from "@/lib/navigation/types";
 import { cn } from "@/lib/utils";
 
@@ -13,28 +14,12 @@ type SidebarNavItemProps = {
   onNavigate?: () => void;
 };
 
-function isExternalHref(href: string) {
-  return /^https?:\/\//.test(href);
-}
-
-function isActivePath(pathname: string, item: SidebarNavigationItem) {
-  if (isExternalHref(item.href) || item.external) {
-    return false;
-  }
-
-  if (pathname === item.href) {
-    return true;
-  }
-
-  return item.matchPrefixes?.some((prefix) => pathname.startsWith(prefix)) ?? false;
-}
-
 export function SidebarNavItem({ item, isExpanded, onNavigate }: SidebarNavItemProps) {
   const pathname = usePathname();
   const Icon = item.icon;
-  const isActive = isActivePath(pathname, item);
+  const isActive = isNavItemActive(pathname, item);
   const className = cn(
-    "group relative flex w-full items-center rounded-xl text-sm font-medium transition-all duration-300",
+    "group relative flex w-full items-center rounded-xl text-sm font-medium transition-all duration-300 outline-none focus-visible:ring-2 focus-visible:ring-[#00D4FF]/70 motion-reduce:transition-none",
     isExpanded ? "gap-3 px-4 py-3" : "justify-center px-0 py-3",
     isActive
       ? "border border-[#00D4FF]/20 bg-[#087EFF]/10 text-[#00D4FF]"
@@ -57,7 +42,7 @@ export function SidebarNavItem({ item, isExpanded, onNavigate }: SidebarNavItemP
         />
       ) : null}
       {!isExpanded ? (
-        <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-[#041C3B] px-2.5 py-1.5 text-xs font-semibold text-white opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
+        <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-[#041C3B] px-2.5 py-1.5 text-xs font-semibold text-white opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
           {item.label}
         </span>
       ) : null}
@@ -71,6 +56,7 @@ export function SidebarNavItem({ item, isExpanded, onNavigate }: SidebarNavItemP
         whileHover={{ x: isExpanded ? 4 : 0 }}
         className={className}
         onClick={onNavigate}
+        aria-label={isExpanded ? undefined : item.label}
       >
         {content}
       </motion.a>
@@ -79,7 +65,13 @@ export function SidebarNavItem({ item, isExpanded, onNavigate }: SidebarNavItemP
 
   return (
     <motion.div whileHover={{ x: isExpanded ? 4 : 0 }}>
-      <Link href={item.href} className={className} onClick={onNavigate}>
+      <Link
+        href={item.href}
+        className={className}
+        onClick={onNavigate}
+        aria-current={isActive ? "page" : undefined}
+        aria-label={isExpanded ? undefined : item.label}
+      >
         {content}
       </Link>
     </motion.div>

@@ -8,6 +8,10 @@ export type SidebarNavigationItem = {
   icon: SidebarIcon;
   matchPrefixes?: string[];
   external?: boolean;
+  /** Section heading shown above the item when the sidebar is expanded. */
+  group?: string;
+  /** One-line purpose, used by the command palette. */
+  description?: string;
 };
 
 export type SidebarUser = {

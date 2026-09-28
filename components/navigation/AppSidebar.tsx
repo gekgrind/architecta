@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftToLine, Menu, X } from "lucide-react";
 import Link from "next/link";
 
@@ -65,15 +65,32 @@ function SidebarContent({ brand, navItems, user, isExpanded, onNavigate }: Sideb
         </Link>
       </div>
 
-      <nav className="mt-6 flex-1 space-y-1 overflow-y-auto px-4 pb-4">
-        {navigationItems.map((item) => (
-          <SidebarNavItem
-            key={`${item.label}-${item.href}`}
-            item={item}
-            isExpanded={isExpanded}
-            onNavigate={onNavigate}
-          />
-        ))}
+      <nav
+        aria-label={`${brand.appName} navigation`}
+        className="mt-6 flex-1 space-y-1 overflow-y-auto px-4 pb-4"
+      >
+        {navigationItems.map((item, index) => {
+          const startsGroup = index === 0 || item.group !== navigationItems[index - 1].group;
+          const showHeading = isExpanded && startsGroup && Boolean(item.group);
+          const showDivider = !showHeading && startsGroup && index > 0;
+
+          return (
+            <Fragment key={`${item.label}-${item.href}`}>
+              {showHeading ? (
+                <p
+                  className={cn(
+                    "px-4 pb-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#BCC0D8]/60",
+                    index > 0 && "pt-4"
+                  )}
+                >
+                  {item.group}
+                </p>
+              ) : null}
+              {showDivider ? <div className="mx-3 my-3 h-px bg-white/5" aria-hidden="true" /> : null}
+              <SidebarNavItem item={item} isExpanded={isExpanded} onNavigate={onNavigate} />
+            </Fragment>
+          );
+        })}
       </nav>
 
       <SidebarUserMenu user={user} isExpanded={isExpanded} />
@@ -84,16 +101,40 @@ function SidebarContent({ brand, navItems, user, isExpanded, onNavigate }: Sideb
 export function AppSidebar({ brand, navItems, user }: AppSidebarProps) {
   const [desktopExpanded, setDesktopExpanded] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!mobileOpen) {
+      return undefined;
+    }
+
+    closeButtonRef.current?.focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setMobileOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [mobileOpen]);
 
   return (
     <>
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 hidden h-screen flex-col border-r border-white/5 bg-[#041C3B]/85 pb-6 backdrop-blur-md transition-[width] duration-300 md:flex",
+          "fixed left-0 top-0 z-40 hidden h-screen flex-col border-r border-white/5 bg-[#041C3B]/85 pb-6 backdrop-blur-md transition-[width] duration-300 motion-reduce:transition-none md:flex",
           desktopExpanded ? "w-72" : "w-[92px]"
         )}
         onMouseEnter={() => setDesktopExpanded(true)}
         onMouseLeave={() => setDesktopExpanded(false)}
+        onFocus={() => setDesktopExpanded(true)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setDesktopExpanded(false);
+          }
+        }}
       >
         <SidebarContent
           brand={brand}
@@ -121,8 +162,14 @@ export function AppSidebar({ brand, navItems, user }: AppSidebarProps) {
             className="absolute inset-0 bg-black/55 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="absolute left-0 top-0 flex h-full w-[min(20rem,calc(100vw-2rem))] flex-col border-r border-white/10 bg-[#041C3B] pb-6 shadow-2xl">
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigation"
+            className="absolute left-0 top-0 flex h-full w-[min(20rem,calc(100vw-2rem))] flex-col border-r border-white/10 bg-[#041C3B] pb-6 shadow-2xl"
+          >
             <button
+              ref={closeButtonRef}
               type="button"
               aria-label="Close navigation"
               onClick={() => setMobileOpen(false)}
