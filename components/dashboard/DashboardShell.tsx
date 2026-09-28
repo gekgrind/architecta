@@ -2,8 +2,9 @@
 
 import { ArchitectaDashboard } from "@/components/dashboard/ArchitectaDashboard";
 import { useAuthIdentity } from "@/hooks/use-auth-identity";
+import type { DashboardResult } from "@/lib/dashboard/model";
 
-export function DashboardShell() {
+export function DashboardShell({ dashboard }: { dashboard: DashboardResult }) {
   const { avatarUrl, displayName, loading, title, user, workspaceName } =
     useAuthIdentity();
   const resolvedName = loading ? "Founder" : displayName;
@@ -11,6 +12,7 @@ export function DashboardShell() {
 
   return (
     <ArchitectaDashboard
+      dashboard={dashboard}
       identity={{
         avatarUrl,
         displayName: resolvedName,

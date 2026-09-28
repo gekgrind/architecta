@@ -1,50 +1,82 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { ChevronRight, Zap } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
+import { ArrowRight, CheckCircle2, Zap } from "lucide-react";
+import Link from "next/link";
 
 import { DashboardCard } from "@/components/dashboard/DashboardCard";
+import type { DashboardAction } from "@/lib/dashboard/model";
+import { cn } from "@/lib/utils";
 
-const actions = [
-  { task: "Approve SEO Blueprint v2", priority: "High" },
-  { task: "Deploy Audience Intelligence", priority: "Auto" },
-  { task: "Competitor Alert: X-Corp Shift", priority: "Urgent" },
-  { task: "Brand Voice Calibration", priority: "Med" },
-  { task: "Finalize Pricing Architecture", priority: "High" },
-];
+const SOURCE_LABEL: Record<DashboardAction["source"], string> = {
+  profile: "Business profile",
+  strategy: "Strategy",
+  content: "Content",
+  publishing: "Publishing",
+  setup: "Setup",
+};
 
-export function ActionQueue() {
+export function ActionQueue({ actions }: { actions: DashboardAction[] }) {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <DashboardCard title="Action Queue" icon={Zap}>
-      <div className="space-y-4">
-        {actions.map((item) => (
-          <motion.div
-            key={item.task}
-            whileHover={{ x: 4 }}
-            className="group flex cursor-pointer items-center justify-between rounded-xl border border-white/5 bg-white/5 p-3 transition-all hover:border-white/10"
-          >
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#041C3B]">
-                <div className="h-2 w-2 rounded-full bg-[#00D4FF]" />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-white transition-colors group-hover:text-[#00D4FF]">
-                  {item.task}
-                </p>
-                <p className="text-[10px] uppercase text-[#BCC0D8]">{item.priority} Priority</p>
-              </div>
-            </div>
-            <ChevronRight size={14} className="shrink-0 text-[#BCC0D8] transition-transform group-hover:translate-x-1" />
-          </motion.div>
-        ))}
-
-        <button
-          type="button"
-          className="mt-4 w-full rounded-xl border border-dashed border-white/10 py-3 text-xs text-[#BCC0D8] transition-all hover:border-[#00D4FF]/50 hover:text-white"
-        >
-          + View Strategy Roadmap
-        </button>
-      </div>
+      {actions.length === 0 ? (
+        <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed border-white/10 p-4">
+          <CheckCircle2 size={18} className="text-[#12E070]" aria-hidden="true" />
+          <p className="text-sm text-white">Nothing needs your attention right now.</p>
+          <p className="text-xs leading-relaxed text-[#BCC0D8]">
+            New actions appear here as your profile, strategy, content and publishing change.
+          </p>
+        </div>
+      ) : (
+        <ol className="space-y-2.5" aria-label="Recommended next actions, most urgent first">
+          {actions.map((action) => {
+            const high = action.priority === "high";
+            return (
+              <motion.li key={action.id} whileHover={shouldReduceMotion ? undefined : { x: 4 }}>
+                <Link
+                  href={action.href}
+                  className={cn(
+                    "group relative block overflow-hidden rounded-xl border bg-white/5 py-3 pl-4 pr-3 outline-none transition-all hover:border-white/15 hover:bg-white/[0.07] focus-visible:ring-2 focus-visible:ring-[#00D4FF]/60",
+                    high ? "border-[#FFE14D]/20" : "border-white/5"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "absolute inset-y-0 left-0 w-0.5",
+                      high ? "bg-[#FFE14D]" : "bg-[#00D4FF]/40"
+                    )}
+                    aria-hidden="true"
+                  />
+                  <p className="text-sm font-medium leading-snug text-white transition-colors group-hover:text-[#00D4FF]">
+                    {action.title}
+                  </p>
+                  <p className="mt-1 text-xs leading-snug text-[#BCC0D8]">{action.reason}</p>
+                  <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+                    <p className="flex items-center gap-2 whitespace-nowrap font-mono text-[10px] uppercase tracking-wide text-[#BCC0D8]/70">
+                      {high ? (
+                        <span className="rounded-full bg-[#FFE14D]/10 px-1.5 py-px font-bold text-[#FFE14D]">
+                          High priority
+                        </span>
+                      ) : null}
+                      <span>{SOURCE_LABEL[action.source]}</span>
+                    </p>
+                    <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[#00D4FF]">
+                      {action.cta}
+                      <ArrowRight
+                        size={12}
+                        className="transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none"
+                        aria-hidden="true"
+                      />
+                    </span>
+                  </div>
+                </Link>
+              </motion.li>
+            );
+          })}
+        </ol>
+      )}
     </DashboardCard>
   );
 }

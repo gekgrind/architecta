@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Building2, Newspaper, Settings, Share2, User } from "lucide-react";
 
+import { AiUsageCard } from "@/components/dashboard/AiUsageCard";
 import { AiProviderSettings } from "@/components/settings/AiProviderSettings";
 import { BlogEmailConnections } from "@/components/settings/BlogEmailConnections";
 import { PlatformConnections } from "@/components/settings/PlatformConnections";
@@ -133,6 +134,9 @@ export default function SettingsPage() {
 
           <AiProviderSettings />
         </section>
+
+        {/* Operational telemetry lives with account settings, not the founder dashboard. */}
+        <AiUsageCard />
 
         <section className="rounded-xl border border-border bg-card p-6">
           <div className="mb-6 flex items-center gap-3">
