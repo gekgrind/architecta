@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -11,6 +11,11 @@ import { ContentRulesStep } from "./steps/content-rules-step"
 import { ExamplePostsStep } from "./steps/example-posts-step"
 import { SuccessStep } from "./steps/success-step"
 import type { ExamplePost } from "@/lib/types"
+import {
+  brandKitPrefillFromProfile,
+  mergeBrandKitPrefill,
+  type BrandKitPrefillSource,
+} from "@/lib/brand-kit/prefill"
 import { ArrowLeft, ArrowRight, Save } from "lucide-react"
 
 const steps = [
@@ -63,6 +68,29 @@ export function BrandKitWizard() {
   const [saveError, setSaveError] = useState<string | null>(null)
 
   const progress = (currentStep / steps.length) * 100
+
+  // Start from what Architecta already knows (onboarding + earlier edits) so
+  // the user refines their profile instead of re-entering it, and saving never
+  // blanks out existing intelligence. Fields the user already typed win.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch("/api/brand-profile", { cache: "no-store" })
+        const json = (await res.json().catch(() => null)) as
+          | { ok?: boolean; data?: { brandProfile?: BrandKitPrefillSource | null } }
+          | null
+        if (cancelled || !res.ok || !json?.ok) return
+        const prefill = brandKitPrefillFromProfile(json.data?.brandProfile ?? null)
+        setFormData((prev) => mergeBrandKitPrefill(prev, prefill))
+      } catch {
+        // Prefill is best-effort; the wizard still works from a blank form.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const updateFormData = (data: Partial<BrandKitFormData>) => {
     setFormData((prev) => ({ ...prev, ...data }))

@@ -62,6 +62,40 @@ export function validateStrategyEngineInput(input: StrategyEngineInput) {
   };
 }
 
+export type StrategyEngineProfileSource = {
+  brandName?: string | null;
+  industry?: string | null;
+  description?: string | null;
+  audience?: string | null;
+  typicalCustomers?: string | null;
+  offers?: string | null;
+};
+
+/**
+ * Brief fields Architecta already knows from the saved business profile
+ * (GET /api/brand-profile). Goal and current challenge are not captured
+ * anywhere yet, so they are left for the founder.
+ */
+export function strategyEnginePrefillFromProfile(
+  profile: StrategyEngineProfileSource | null
+): Partial<Pick<StrategyEngineInput, "businessNiche" | "audience" | "offer">> {
+  if (!profile) return {};
+  const clean = (value: string | null | undefined) => value?.trim() || "";
+
+  const brandName = clean(profile.brandName);
+  const industry = clean(profile.industry);
+  const businessNiche =
+    brandName && industry ? `${brandName} — ${industry}` : brandName || industry || clean(profile.description);
+  const audience = clean(profile.audience) || clean(profile.typicalCustomers);
+  const offer = clean(profile.offers) || clean(profile.description);
+
+  return {
+    ...(businessNiche ? { businessNiche } : {}),
+    ...(audience ? { audience } : {}),
+    ...(offer ? { offer } : {}),
+  };
+}
+
 type StrategyEnginePillarPayload = {
   title?: unknown;
   description?: unknown;

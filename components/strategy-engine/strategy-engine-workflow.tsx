@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, ReactNode, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   ArrowRight,
@@ -23,10 +23,12 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   generateStrategyEnginePlan,
   strategyEnginePlatforms,
+  strategyEnginePrefillFromProfile,
   validateStrategyEngineInput,
   type GeneratedStrategyEnginePlan,
   type StrategyEngineInput,
   type StrategyEnginePlatform,
+  type StrategyEngineProfileSource,
 } from "@/lib/strategy/strategy-engine";
 
 const initialInput: StrategyEngineInput = {
@@ -55,6 +57,39 @@ export function StrategyEngineWorkflow() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [profilePrefill, setProfilePrefill] = useState<Partial<StrategyEngineInput>>({});
+
+  // Don't ask for what Architecta already knows: seed the brief from the
+  // saved business profile, never overwriting anything already typed.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/brand-profile", { cache: "no-store" });
+        const json = (await res.json().catch(() => null)) as {
+          ok?: boolean;
+          data?: { brandProfile?: StrategyEngineProfileSource | null };
+        } | null;
+        if (cancelled || !res.ok || !json?.ok) return;
+        const prefill = strategyEnginePrefillFromProfile(json.data?.brandProfile ?? null);
+        setProfilePrefill(prefill);
+        setInput((current) => {
+          const next = { ...current };
+          for (const field of ["businessNiche", "audience", "offer"] as const) {
+            const value = prefill[field];
+            if (value && !current[field].trim()) next[field] = value;
+          }
+          return next;
+        });
+      } catch {
+        // Prefill is best-effort; the brief still works when filled by hand.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const isPrefilled = Object.keys(profilePrefill).length > 0;
 
   const validation = useMemo(() => validateStrategyEngineInput(input), [input]);
   const completionCount = useMemo(() => {
@@ -103,7 +138,7 @@ export function StrategyEngineWorkflow() {
   }
 
   function handleReset() {
-    setInput(initialInput);
+    setInput({ ...initialInput, ...profilePrefill });
     setPlan(null);
     setError(null);
     setHasSubmitted(false);
@@ -157,7 +192,9 @@ export function StrategyEngineWorkflow() {
                 Strategy brief
               </h2>
               <p className="mt-1 text-sm leading-6 text-[#BCC0D8]">
-                Capture the inputs Architecta needs to shape the growth system.
+                {isPrefilled
+                  ? "Prefilled from your business profile. Review it, then add your goal and current challenge."
+                  : "Capture the inputs Architecta needs to shape the growth system."}
               </p>
             </div>
           </div>
