@@ -27,10 +27,13 @@ export function StrategyEngineShell() {
       <DashboardTopBar />
 
       <main className="relative z-10 min-h-screen px-4 pb-24 pt-28 xl:pl-24 xl:pr-8">
+        {/* `initial` must match between server and client render: a reduced-motion
+            client that skipped it would keep the server's hidden styles forever.
+            Reduced motion instead resolves instantly, without movement. */}
         <motion.div
-          initial={shouldReduceMotion ? false : { y: 28, opacity: 0 }}
-          animate={shouldReduceMotion ? undefined : { y: 0, opacity: 1 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
+          initial={{ y: 28, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.5, ease: "easeOut" as const }}
           className="mx-auto max-w-7xl"
         >
           <StrategyEngineWorkflow />

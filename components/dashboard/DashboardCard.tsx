@@ -25,8 +25,10 @@ export function DashboardCard({ children, className, title, icon: Icon }: Dashbo
     const x = (event.clientX - rect.left) / rect.width - 0.5;
     const y = (event.clientY - rect.top) / rect.height - 0.5;
 
-    mouseX.set(x);
-    mouseY.set(y);
+    // Reduced motion keeps the card flat. The tilt is gated here rather than by
+    // omitting the style below, so server and first client render stay identical.
+    mouseX.set(shouldReduceMotion ? 0 : x);
+    mouseY.set(shouldReduceMotion ? 0 : y);
     event.currentTarget.style.setProperty("--mouse-x", `${event.clientX - rect.left}px`);
     event.currentTarget.style.setProperty("--mouse-y", `${event.clientY - rect.top}px`);
   }
@@ -40,7 +42,7 @@ export function DashboardCard({ children, className, title, icon: Icon }: Dashbo
     <motion.div
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      style={shouldReduceMotion ? undefined : { rotateX, rotateY, transformStyle: "preserve-3d" }}
+      style={{ rotateX, rotateY, transformStyle: "preserve-3d" }}
       className={cn(
         "group relative overflow-hidden rounded-2xl border border-white/10 bg-[#0B2B57]/40 p-6 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)] backdrop-blur-xl transition duration-300",
         "hover:border-[#00D4FF]/45 hover:bg-[#0B2B57]/60 hover:shadow-[0_0_15px_rgba(0,212,255,0.3)]",
@@ -48,7 +50,7 @@ export function DashboardCard({ children, className, title, icon: Icon }: Dashbo
         className
       )}
     >
-      <div className="relative z-10" style={shouldReduceMotion ? undefined : { transform: "translateZ(34px)" }}>
+      <div className="relative z-10" style={{ transform: "translateZ(34px)" }}>
         {title ? (
           <div className="mb-6 flex items-center gap-3">
             {Icon ? (
