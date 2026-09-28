@@ -19,19 +19,24 @@ const PROTECTED_PREFIXES = [
   "/analytics",
   "/brand-kit",
   "/campaigns",
+  "/content-architect",
+  "/content-strategy",
   "/dashboard",
   "/generate",
   "/library",
   "/calendar",
   "/seo",
   "/settings",
+  "/strategy-engine",
   "/studio",
   "/app",
 ];
 
 export async function middleware(req: NextRequest) {
   const { url, anonKey } = getSupabaseProjectConfig();
-  const sharedCookieOptions = getSharedSupabaseCookieOptions();
+  const sharedCookieOptions = getSharedSupabaseCookieOptions(
+    req.headers.get("host")
+  );
   const res = NextResponse.next();
 
   const supabase = createServerClient(url, anonKey, {
@@ -112,12 +117,15 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/analytics") ||
     pathname.startsWith("/brand-kit") ||
     pathname.startsWith("/campaigns") ||
+    pathname.startsWith("/content-architect") ||
+    pathname.startsWith("/content-strategy") ||
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/generate") ||
     pathname.startsWith("/library") ||
     pathname.startsWith("/calendar") ||
     pathname.startsWith("/seo") ||
     pathname.startsWith("/settings") ||
+    pathname.startsWith("/strategy-engine") ||
     pathname.startsWith("/studio") ||
     pathname.startsWith("/app/architecta");
 
