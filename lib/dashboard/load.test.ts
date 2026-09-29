@@ -113,6 +113,88 @@ describe("loadDashboard", () => {
     expect(result.model.actions.some((a) => a.id === "connect-channel")).toBe(false);
   });
 
+  it("loads only the user's business strategies so content plans cannot displace the active one", async () => {
+    const contentPlans = Array.from({ length: 25 }, (_, i) => ({
+      id: `cs-${i}`,
+      user_id: USER,
+      kind: i % 2 ? "content_strategy" : "content_architect",
+      status: "draft",
+      created_at: `2026-09-2${i % 7}T00:00:${String(i).padStart(2, "0")}.000Z`,
+    }));
+    const fake = makeFakeSupabase({
+      ...seed(),
+      architecta_content_strategies: [
+        ...contentPlans,
+        { id: "engine-active", user_id: USER, kind: "strategy_engine", status: "active", title: "Mine", created_at: "2026-08-01T00:00:00.000Z" },
+        { id: "engine-archived", user_id: USER, kind: "strategy_engine", status: "archived", created_at: "2026-09-27T00:00:00.000Z" },
+        { id: "other-user", user_id: OTHER, kind: "strategy_engine", status: "active", created_at: "2026-09-27T00:00:00.000Z" },
+      ],
+    });
+    h.createSupabaseServerClient.mockResolvedValue(fake.client);
+
+    const result = await loadDashboard(NOW);
+    if (result.status !== "ready") throw new Error("expected ready");
+    expect(result.model.strategy.latest).toMatchObject({ id: "engine-active", isActive: true });
+    expect(result.model.strategy.savedCount).toBe(1);
+  });
+
+  describe("current strategy selection", () => {
+    const row = (id: string, kind: string, status: string, created_at: string, user_id = USER) => ({
+      id,
+      user_id,
+      kind,
+      status,
+      title: id,
+      created_at,
+    });
+    const drafts = (count: number) =>
+      Array.from({ length: count }, (_, i) =>
+        row(`draft-${i}`, i % 2 ? "custom" : "strategy_engine", "draft", `2026-09-${String(1 + (i % 25)).padStart(2, "0")}T10:00:${String(i).padStart(2, "0")}.000Z`)
+      );
+    const load = async (rows: ReturnType<typeof row>[]) => {
+      const fake = makeFakeSupabase({ ...seed(), architecta_content_strategies: rows });
+      h.createSupabaseServerClient.mockResolvedValue(fake.client);
+      const result = await loadDashboard(NOW);
+      if (result.status !== "ready") throw new Error("expected ready");
+      return result.model.strategy;
+    };
+
+    it("active eligible strategy wins even when more than 20 newer drafts exist", async () => {
+      const strategy = await load([
+        row("old-active", "strategy_engine", "active", "2026-01-01T00:00:00.000Z"),
+        ...drafts(30),
+        row("cs-newer", "content_strategy", "draft", "2026-09-29T00:00:00.000Z"),
+        row("ca-newer", "content_architect", "active", "2026-09-29T00:00:00.000Z"),
+      ]);
+      expect(strategy.latest).toMatchObject({ id: "old-active", isActive: true });
+    });
+
+    it("uses the newest draft only as a fallback when no active strategy exists", async () => {
+      const strategy = await load([
+        ...drafts(3),
+        row("newest-draft", "strategy_engine", "draft", "2026-09-28T00:00:00.000Z"),
+      ]);
+      expect(strategy.latest).toMatchObject({ id: "newest-draft", isActive: false });
+    });
+
+    it("never selects content_strategy, content_architect or archived rows", async () => {
+      const strategy = await load([
+        row("cs-active", "content_strategy", "active", "2026-09-28T00:00:00.000Z"),
+        row("ca-active", "content_architect", "active", "2026-09-28T00:00:00.000Z"),
+        row("archived-engine", "strategy_engine", "archived", "2026-09-28T00:00:00.000Z"),
+      ]);
+      expect(strategy.latest).toBeNull();
+    });
+
+    it("reports the strategy section as unavailable when the strategy lookup fails", async () => {
+      const fake = makeFakeSupabase(seed(), (table, op) => table === "architecta_content_strategies" && op === "select");
+      h.createSupabaseServerClient.mockResolvedValue(fake.client);
+      const result = await loadDashboard(NOW);
+      if (result.status !== "ready") throw new Error("expected ready");
+      expect(result.model.strategy.status).toBe("error");
+    });
+  });
+
   it("returns unauthenticated without querying data", async () => {
     const fake = makeFakeSupabase(seed());
     h.createSupabaseServerClient.mockResolvedValue(fake.client);

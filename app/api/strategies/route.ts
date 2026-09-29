@@ -8,61 +8,62 @@ import { apiError, apiOk, parseJsonBody } from "@/lib/api/response";
 import { getAuthenticatedUser } from "@/lib/auth/server";
 import { enforceAiUsage, RATE_LIMITS } from "@/lib/ratelimit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  BUSINESS_STRATEGY_KINDS,
+  generatedStrategyIssues,
+  isBusinessStrategyKind,
+  isUsableGeneratedPillar,
+  normalizeStrategyRecord,
+  STRATEGY_KINDS,
+} from "@/lib/strategy/strategy-record";
 import { strategyGenerateInputSchema } from "@/lib/validation/strategy";
 
 export const runtime = "nodejs";
 
-const ALLOWED_KINDS = [
-  "content_strategy",
-  "content_architect",
-  "strategy_engine",
-  "custom",
-] as const;
+const ALLOWED_KINDS = STRATEGY_KINDS;
 
-type StrategyRow = {
-  id: string;
-  kind: string;
-  title: string | null;
-  summary: string | null;
-  pillars: unknown;
-  audience_angles: unknown;
-  content_themes: unknown;
-  posting_cadence: unknown;
-  quick_wins: unknown;
-  next_actions: unknown;
-  campaigns_seed: unknown;
-  platform_strategy: unknown;
-  source_input: unknown;
-  status: string;
-  ai_provider: string | null;
-  ai_model: string | null;
-  meta: Record<string, unknown> | null;
-  created_at: string;
-  updated_at: string;
-};
+type Supabase = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
-function toCamel(row: StrategyRow) {
-  return {
-    id: row.id,
-    kind: row.kind,
-    title: row.title,
-    summary: row.summary,
-    pillars: row.pillars ?? [],
-    audienceAngles: row.audience_angles ?? [],
-    contentThemes: row.content_themes ?? [],
-    postingCadence: row.posting_cadence ?? [],
-    quickWins: row.quick_wins ?? [],
-    nextActions: row.next_actions ?? [],
-    campaignsSeed: row.campaigns_seed ?? [],
-    platformStrategy: row.platform_strategy ?? {},
-    sourceInput: row.source_input ?? {},
-    status: row.status,
-    aiProvider: row.ai_provider,
-    aiModel: row.ai_model,
-    meta: row.meta ?? {},
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
+async function hasActiveBusinessStrategy(supabase: Supabase, userId: string) {
+  const { data, error } = await supabase
+    .from("architecta_content_strategies")
+    .select("id")
+    .eq("user_id", userId)
+    .in("kind", [...BUSINESS_STRATEGY_KINDS])
+    .eq("status", "active")
+    .limit(1);
+  if (error) throw new Error(error.message);
+  return (data ?? []).length > 0;
+}
+
+/**
+ * Two first strategies generated concurrently can both be inserted active.
+ * The earliest active one keeps the slot; a later one demotes itself to draft.
+ * Returns the row's final status.
+ */
+async function settleAutoActivation(
+  supabase: Supabase,
+  userId: string,
+  saved: { id: string; created_at: string }
+): Promise<"active" | "draft"> {
+  const { data } = await supabase
+    .from("architecta_content_strategies")
+    .select("id, created_at")
+    .eq("user_id", userId)
+    .in("kind", [...BUSINESS_STRATEGY_KINDS])
+    .eq("status", "active");
+  const actives = (data ?? []) as Array<{ id: string; created_at: string }>;
+  const earliest = [...actives].sort((a, b) =>
+    a.created_at !== b.created_at ? (a.created_at < b.created_at ? -1 : 1) : a.id < b.id ? -1 : 1
+  )[0];
+  if (!earliest || earliest.id === saved.id) return "active";
+
+  const { error } = await supabase
+    .from("architecta_content_strategies")
+    .update({ status: "draft" })
+    .eq("user_id", userId)
+    .eq("id", saved.id);
+  return error ? "active" : "draft";
 }
 
 export async function GET(req: Request) {
@@ -88,7 +89,7 @@ export async function GET(req: Request) {
   if (error) return apiError("server_error", error.message);
 
   return apiOk({
-    strategies: (data ?? []).map((row) => toCamel(row as StrategyRow)),
+    strategies: (data ?? []).map(normalizeStrategyRecord),
   });
 }
 
@@ -155,6 +156,45 @@ export async function POST(req: Request) {
     return apiError("upstream_error", message);
   }
 
+  // Business strategies (the Strategy Engine) must be substantive before they
+  // are saved: nothing is persisted, and nothing is invented, when the model
+  // returns an unusable result.
+  const isBusinessStrategy = isBusinessStrategyKind(kind);
+  let pillars: unknown[] = parsed.contentPillars;
+  let status: "active" | "draft" = "draft";
+  if (isBusinessStrategy) {
+    const issues = generatedStrategyIssues(parsed);
+    if (issues.length) {
+      console.warn("[strategies] rejected incomplete generated strategy", {
+        kind,
+        issues,
+        provider: result.provider,
+        model: result.model,
+        pillarCount: parsed.contentPillars.length,
+        summaryLength: parsed.summary.trim().length,
+      });
+      return apiError(
+        "upstream_error",
+        "The AI returned an incomplete strategy, so nothing was saved. Try generating again.",
+        { details: { issues } }
+      );
+    }
+    pillars = parsed.contentPillars
+      .filter(isUsableGeneratedPillar)
+      .map((pillar) => ({ id: crypto.randomUUID(), ...pillar }));
+
+    // The first business strategy becomes the current one; later ones stay
+    // drafts until explicitly activated. When the lookup fails, save a draft
+    // rather than risk a second active strategy.
+    try {
+      status = (await hasActiveBusinessStrategy(supabase, session.user.id)) ? "draft" : "active";
+    } catch (err) {
+      console.warn("[strategies] active strategy lookup failed; saving as draft", {
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   const title =
     input.businessNiche.length > 80
       ? `${input.businessNiche.slice(0, 77)}...`
@@ -167,7 +207,7 @@ export async function POST(req: Request) {
     kind,
     title,
     summary: parsed.summary,
-    pillars: parsed.contentPillars,
+    pillars,
     audience_angles: parsed.audienceAngles,
     content_themes: parsed.contentThemes,
     posting_cadence: parsed.postingCadence,
@@ -176,7 +216,7 @@ export async function POST(req: Request) {
     campaigns_seed: parsed.postIdeas,
     platform_strategy: { preferredPlatforms: input.preferredPlatforms },
     source_input: input,
-    status: "draft" as const,
+    status,
     ai_provider: result.provider,
     ai_model: result.model,
     meta: {
@@ -197,8 +237,13 @@ export async function POST(req: Request) {
 
   if (saveError) return apiError("server_error", saveError.message);
 
+  const savedRow = saved as { id: string; created_at: string; status: string };
+  if (status === "active") {
+    savedRow.status = await settleAutoActivation(supabase, session.user.id, savedRow);
+  }
+
   return apiOk({
-    strategy: toCamel(saved as StrategyRow),
+    strategy: normalizeStrategyRecord(savedRow),
     generated: parsed,
   });
 }

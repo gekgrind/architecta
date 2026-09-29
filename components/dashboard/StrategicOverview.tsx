@@ -31,8 +31,8 @@ export function StrategicOverview({ strategy, knowledge }: StrategicOverviewProp
           <div>
             <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-[#BCC0D8]">
               {strategy.latest.kindLabel} · {strategy.latest.createdLabel} ·{" "}
-              <span className={strategy.latest.status === "active" ? "text-[#12E070]" : "text-[#FFE14D]"}>
-                {strategy.latest.status}
+              <span className={strategy.latest.isActive ? "text-[#12E070]" : "text-[#FFE14D]"}>
+                {strategy.latest.statusLabel}
               </span>
             </p>
             <h3 className="text-xl font-medium text-white">{strategy.latest.title}</h3>
@@ -45,7 +45,7 @@ export function StrategicOverview({ strategy, knowledge }: StrategicOverviewProp
             <div className="grid gap-4 md:grid-cols-3">
               {strategy.latest.pillars.map((pillar, index) => (
                 <StrategyPhase
-                  key={pillar.title}
+                  key={pillar.id}
                   label={`Pillar ${index + 1}`}
                   title={pillar.title}
                   body={pillar.description}

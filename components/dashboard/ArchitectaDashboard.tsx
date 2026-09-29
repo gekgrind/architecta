@@ -103,8 +103,8 @@ export function ArchitectaDashboard({ identity, dashboard, preview = false }: Ar
               {activeStrategy ? (
                 <p className="font-mono text-[10px] uppercase tracking-widest text-[#BCC0D8] md:text-right">
                   {activeStrategy.kindLabel} ·{" "}
-                  <span className={activeStrategy.status === "active" ? "text-[#12E070]" : "text-[#FFE14D]"}>
-                    {activeStrategy.status}
+                  <span className={activeStrategy.isActive ? "text-[#12E070]" : "text-[#FFE14D]"}>
+                    {activeStrategy.statusLabel}
                   </span>
                   {activeStrategy.createdLabel ? ` · ${activeStrategy.createdLabel}` : null}
                 </p>

@@ -139,12 +139,42 @@ describe("ArchitectaDashboard", () => {
     });
 
     expect(html).toContain("Open Strategy");
+    expect(html).toContain(">Active</span>");
+    expect(html).not.toContain("Latest draft");
     expect(html).not.toContain("Create Strategy");
     expect(html).not.toContain("New Strategy");
     expect(html).toContain("in pipeline");
     expect(html).toContain("Awaiting data");
     expect(html).toContain("1 published · engagement not connected");
     expect(html).not.toContain(">Results<");
+  });
+
+  it("labels a draft-only strategy as the latest draft, never as active", () => {
+    const html = render({
+      status: "ready",
+      model: buildDashboardModel(
+        sources({
+          strategies: ok([
+            {
+              id: "s1",
+              kind: "strategy_engine",
+              title: "Own the two-week sprint",
+              summary: null,
+              status: "draft",
+              pillars: [],
+              next_actions: [],
+              quick_wins: [],
+              meta: null,
+              created_at: "2026-09-25T00:00:00.000Z",
+            },
+          ]),
+        }),
+        NOW
+      ),
+    });
+
+    expect(html).toContain(">Latest draft</span>");
+    expect(html).not.toContain(">Active</span>");
   });
 
   it("shows an error state instead of placeholder content when loading fails", () => {

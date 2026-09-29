@@ -437,7 +437,7 @@ function PillarSection({
       </h3>
       <div className="grid gap-3 lg:grid-cols-3">
         {pillars.map((pillar) => (
-          <div key={pillar.title} className="rounded-xl border border-white/10 bg-[#0B2B57]/35 p-4">
+          <div key={pillar.id} className="rounded-xl border border-white/10 bg-[#0B2B57]/35 p-4">
             <h4 className="font-semibold text-white">{pillar.title}</h4>
             <p className="mt-2 text-sm leading-5 text-[#BCC0D8]">{pillar.description}</p>
             <ul className="mt-3 space-y-2">
@@ -455,6 +455,9 @@ function PillarSection({
 }
 
 function ListSection({ title, icon: Icon, items }: { title: string; icon: LucideIcon; items: string[] }) {
+  // Only what the AI generated is shown; an empty list is omitted, not filled in.
+  if (items.length === 0) return null;
+
   return (
     <section className="space-y-3 rounded-2xl border border-white/10 bg-[#041C3B]/35 p-4">
       <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00D4FF]">

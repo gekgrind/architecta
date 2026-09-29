@@ -8,6 +8,12 @@
  * placeholder value.
  */
 
+import {
+  eligibleStrategies,
+  normalizeStrategyRecord,
+  selectCurrentStrategy,
+} from "@/lib/strategy/strategy-record";
+
 /* =======================================================
    Source shapes (subset of the persisted rows)
 ======================================================= */
@@ -131,7 +137,7 @@ export type DashboardWebsiteAnalysis = {
   ctaPatterns: string[];
 };
 
-export type StrategyPillarSummary = { title: string; description: string };
+export type StrategyPillarSummary = { id: string; title: string; description: string };
 
 export type DashboardStrategy = {
   id: string;
@@ -139,6 +145,9 @@ export type DashboardStrategy = {
   title: string;
   summary: string | null;
   status: string;
+  /** True only for an explicitly activated strategy; the latest-draft fallback is never active. */
+  isActive: boolean;
+  statusLabel: "Active" | "Latest draft";
   createdLabel: string;
   pillars: StrategyPillarSummary[];
   focus: string[];
@@ -426,48 +435,38 @@ function buildKnowledge(
   };
 }
 
-function pillarSummaries(value: unknown): StrategyPillarSummary[] {
-  if (!Array.isArray(value)) return [];
-  const out: StrategyPillarSummary[] = [];
-  for (const entry of value) {
-    const pillar = record(entry);
-    const title = text(pillar?.title);
-    if (!title) continue;
-    const description = text(pillar?.description) ?? strings(pillar?.items ?? pillar?.moves)[0] ?? "";
-    out.push({ title, description });
-  }
-  return out;
-}
-
 function buildStrategy(state: LoadState<StrategySource[]>) {
   if (!state.ok) return { status: "error" as const, latest: null, savedCount: 0 };
 
-  const usable = state.data.filter((row) => row.status !== "archived");
-  // An explicitly activated strategy wins; otherwise the most recent one.
-  const latestRow =
-    usable.find((row) => row.status === "active") ??
-    [...usable].sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0] ??
-    null;
+  // Only business strategies qualify; an active one wins, otherwise the newest
+  // draft is shown as a draft — never as the active strategy.
+  const records = state.data.map(normalizeStrategyRecord);
+  const current = selectCurrentStrategy(records);
+  const savedCount = eligibleStrategies(records).length;
 
-  if (!latestRow) return { status: "ready" as const, latest: null, savedCount: 0 };
+  if (!current) return { status: "ready" as const, latest: null, savedCount };
 
-  const meta = record(latestRow.meta) ?? {};
-  const kindLabel = STRATEGY_KIND_LABEL[latestRow.kind ?? ""] ?? "Strategy";
+  const { record, isActive } = current;
+  const kindLabel = STRATEGY_KIND_LABEL[record.kind] ?? "Strategy";
 
   const latest: DashboardStrategy = {
-    id: latestRow.id,
+    id: record.id,
     kindLabel,
-    title: text(latestRow.title) ?? kindLabel,
-    summary: text(latestRow.summary),
-    status: latestRow.status ?? "draft",
-    createdLabel: formatDateLabel(latestRow.created_at) ?? "",
-    pillars: pillarSummaries(latestRow.pillars).slice(0, 3),
-    focus: strings(meta.thirtyDayFocus).slice(0, 4),
-    priorities: strings(meta.growthPriorities).slice(0, 4),
-    nextMoves: [...strings(latestRow.next_actions), ...strings(latestRow.quick_wins)].slice(0, 4),
+    title: record.title ?? kindLabel,
+    summary: record.summary,
+    status: record.status,
+    isActive,
+    statusLabel: isActive ? "Active" : "Latest draft",
+    createdLabel: formatDateLabel(record.createdAt) ?? "",
+    pillars: record.pillars
+      .slice(0, 3)
+      .map((pillar) => ({ id: pillar.id, title: pillar.title, description: pillar.description || (pillar.items[0] ?? "") })),
+    focus: record.thirtyDayFocus.slice(0, 4),
+    priorities: record.growthPriorities.slice(0, 4),
+    nextMoves: [...record.nextActions, ...record.quickWins].slice(0, 4),
   };
 
-  return { status: "ready" as const, latest, savedCount: usable.length };
+  return { status: "ready" as const, latest, savedCount };
 }
 
 function buildExecution(state: LoadState<PostSource[]>, now: Date): DashboardExecution {
@@ -590,7 +589,7 @@ function buildLoop(model: Omit<DashboardModel, "loop" | "actions">): LoopStage[]
         ? {
             id: "strategy",
             label: "Strategy",
-            value: strategy.latest.status === "active" ? "Active" : "Drafted",
+            value: strategy.latest.isActive ? "Active" : "Drafted",
             caption: `${strategy.latest.kindLabel} · ${strategy.latest.createdLabel}`,
             href: "/strategy-engine",
             state: "established",

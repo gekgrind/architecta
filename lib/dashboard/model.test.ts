@@ -247,7 +247,68 @@ describe("buildDashboardModel — strategy, execution and results", () => {
       NOW
     );
     expect(model.strategy.latest?.id).toBe("active");
+    expect(model.strategy.latest).toMatchObject({ isActive: true, statusLabel: "Active" });
     expect(model.loop[1].value).toBe("Active");
+  });
+
+  it("shows the newest draft as a latest draft, never as active", () => {
+    const model = buildDashboardModel(
+      emptySources({
+        strategies: ok([
+          { ...strategy, id: "older", created_at: "2026-09-01T00:00:00.000Z" },
+          strategy,
+        ]),
+      }),
+      NOW
+    );
+    expect(model.strategy.latest).toMatchObject({ id: "s1", status: "draft", isActive: false, statusLabel: "Latest draft" });
+    expect(model.loop[1].value).toBe("Drafted");
+  });
+
+  it("never lets a Content Strategy or Content Architect plan become the current strategy", () => {
+    const model = buildDashboardModel(
+      emptySources({
+        strategies: ok([
+          { ...strategy, id: "cs", kind: "content_strategy", status: "active", created_at: "2026-09-26T00:00:00.000Z" },
+          { ...strategy, id: "ca", kind: "content_architect", status: "active", created_at: "2026-09-27T00:00:00.000Z" },
+          { ...strategy, id: "engine", created_at: "2026-09-01T00:00:00.000Z" },
+        ]),
+      }),
+      NOW
+    );
+    expect(model.strategy.latest).toMatchObject({ id: "engine", isActive: false });
+    expect(model.strategy.savedCount).toBe(1);
+  });
+
+  it("reports no strategy when only content plans or archived strategies exist", () => {
+    const model = buildDashboardModel(
+      emptySources({
+        strategies: ok([
+          { ...strategy, id: "cs", kind: "content_strategy", status: "active" },
+          { ...strategy, id: "ca", kind: "content_architect" },
+          { ...strategy, id: "gone", status: "archived" },
+        ]),
+      }),
+      NOW
+    );
+    expect(model.strategy.latest).toBeNull();
+    expect(model.actions.some((a) => a.id === "first-strategy")).toBe(true);
+  });
+
+  it("resolves several legacy active strategies to the newest", () => {
+    const rows: StrategySource[] = [
+      { ...strategy, id: "a1", status: "active", created_at: "2026-09-01T00:00:00.000Z" },
+      { ...strategy, id: "a2", status: "active", created_at: "2026-09-20T00:00:00.000Z" },
+      { ...strategy, id: "d", status: "draft", created_at: "2026-09-26T00:00:00.000Z" },
+    ];
+    expect(buildDashboardModel(emptySources({ strategies: ok(rows) }), NOW).strategy.latest?.id).toBe("a2");
+    expect(buildDashboardModel(emptySources({ strategies: ok([...rows].reverse()) }), NOW).strategy.latest?.id).toBe("a2");
+  });
+
+  it("gives pillars stable ids across reads", () => {
+    const read = () => buildDashboardModel(emptySources({ strategies: ok([strategy]) }), NOW).strategy.latest?.pillars;
+    expect(read()?.map((p) => p.id)).toEqual(["s1:p0:proof-of-speed", "s1:p1:founder-education"]);
+    expect(read()).toEqual(read());
   });
 
   it("counts the content pipeline and the next scheduled post", () => {

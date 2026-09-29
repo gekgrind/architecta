@@ -19,6 +19,7 @@ import {
 } from "@/lib/dashboard/model";
 import { ARCHITECTA_ONBOARDING_APP } from "@/lib/onboarding/gate";
 import { WEBSITE_ANALYSIS_TABLE } from "@/lib/onboarding/website-analysis-jobs";
+import { BUSINESS_STRATEGY_KINDS } from "@/lib/strategy/strategy-record";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type QueryResult = { data: unknown; error: unknown };
@@ -86,6 +87,49 @@ async function loadConnections(
   };
 }
 
+const STRATEGY_COLUMNS =
+  "id, kind, title, summary, status, pillars, next_actions, quick_wins, meta, created_at";
+
+/**
+ * The explicit active strategy is queried on its own so the bounded
+ * recent-strategies window can never hide it. Both queries are limited to
+ * business strategy kinds so content plans cannot interfere.
+ */
+async function loadStrategies(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<LoadState<StrategySource[]>> {
+  const [active, recent] = await Promise.all([
+    settle<StrategySource[]>(
+      supabase
+        .from("architecta_content_strategies")
+        .select(STRATEGY_COLUMNS)
+        .eq("user_id", userId)
+        .in("kind", [...BUSINESS_STRATEGY_KINDS])
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(5)
+    ),
+    settle<StrategySource[]>(
+      supabase
+        .from("architecta_content_strategies")
+        .select(STRATEGY_COLUMNS)
+        .eq("user_id", userId)
+        .in("kind", [...BUSINESS_STRATEGY_KINDS])
+        .in("status", ["active", "draft"])
+        .order("created_at", { ascending: false })
+        .limit(20)
+    ),
+  ]);
+
+  // Without the active lookup the current strategy can't be trusted.
+  if (!active.ok || !recent.ok) return { ok: false };
+
+  const byId = new Map<string, StrategySource>();
+  for (const row of [...(active.data ?? []), ...(recent.data ?? [])]) byId.set(row.id, row);
+  return { ok: true, data: [...byId.values()] };
+}
+
 export async function loadDashboardSources(
   supabase: SupabaseClient,
   userId: string,
@@ -114,14 +158,7 @@ export async function loadDashboardSources(
           .maybeSingle()
       ),
       onboardingPromise,
-      settle<StrategySource[]>(
-        supabase
-          .from("architecta_content_strategies")
-          .select("id, kind, title, summary, status, pillars, next_actions, quick_wins, meta, created_at")
-          .eq("user_id", userId)
-          .order("created_at", { ascending: false })
-          .limit(20)
-      ),
+      loadStrategies(supabase, userId),
       settle<PostSource[]>(
         supabase
           .from("architecta_posts")
@@ -151,7 +188,7 @@ export async function loadDashboardSources(
     brandProfile,
     onboarding,
     websiteAnalysis,
-    strategies: strategies.ok ? { ok: true, data: strategies.data ?? [] } : strategies,
+    strategies,
     posts: posts.ok ? { ok: true, data: posts.data ?? [] } : posts,
     campaigns: campaigns.ok ? { ok: true, data: campaigns.data ?? [] } : campaigns,
     publishLog: publishLog.ok ? { ok: true, data: publishLog.data ?? [] } : publishLog,
