@@ -4,6 +4,7 @@ import { Inter, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 
 import "./globals.css";
+import { ClickSpark } from "@/components/global/ClickSpark";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 
 const inter = Inter({
@@ -38,6 +39,8 @@ export default function RootLayout({
       className={`${inter.variable} ${geistMono.variable}`}
     >
       <body className="relative overflow-x-hidden antialiased">
+        <ClickSpark />
+
         {/* Global theme + blueprint background */}
         <ThemeProvider>
           {children}
