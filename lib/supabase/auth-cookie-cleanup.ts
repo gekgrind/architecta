@@ -75,8 +75,9 @@ export type AuthCookieInventory = {
    * different names (a bare cookie beside chunks). A name-keyed reader
    * then sees only one of them, so nothing it derives may touch the
    * other — see `auth-session-resolution`. Byte-identical copies in two
-   * scopes are one session, not a conflict. Any `revocationOnly` pair is
-   * a conflict too, even alone: a name-keyed reader would adopt it.
+   * scopes are one session, not a conflict. Any `revocationOnly` pair, or
+   * an assembly that gave up, is a conflict too, even alone: a name-keyed
+   * reader would adopt what it holds.
    */
   conflict: boolean;
 };
@@ -273,15 +274,46 @@ export function assembleSessionCandidates(occurrences: Map<string, string[]>) {
       cookies.map(({ value }) => value).join("")
     );
 
-    if (
-      !session ||
-      typeof session.access_token !== "string" ||
-      typeof session.refresh_token !== "string"
-    ) {
+    if (!session) {
       return false;
     }
 
-    const claims = claimsOf(session.access_token);
+    const accessToken =
+      typeof session.access_token === "string" ? session.access_token : "";
+    const refreshToken =
+      typeof session.refresh_token === "string" ? session.refresh_token : "";
+
+    if (!accessToken && !refreshToken) {
+      return false;
+    }
+
+    if (!accessToken || !refreshToken) {
+      /* Half a session: nothing to serve, but auth-js would still refresh
+         a lone refresh token, and a lone access token may still be live.
+         Kept for revocation; an empty token is no credential. */
+      const claims = accessToken ? claimsOf(accessToken) : {};
+      const key = `${accessToken}|${refreshToken}`;
+
+      if (!unbound.has(key)) {
+        unbound.set(key, {
+          cookies,
+          accessToken,
+          refreshToken,
+          expiresAt: Number(session.expires_at) || 0,
+          tokenExpiresAt:
+            typeof claims.exp === "number" && Number.isFinite(claims.exp)
+              ? claims.exp
+              : null,
+          sessionId:
+            typeof claims.session_id === "string" ? claims.session_id : null,
+          userId: typeof claims.sub === "string" ? claims.sub : null,
+        });
+      }
+
+      return false;
+    }
+
+    const claims = claimsOf(session.access_token as string);
     const userId = session.user?.id;
     const key = `${session.access_token}|${session.refresh_token}`;
     const candidate: SessionCandidate = {
@@ -491,7 +523,10 @@ export function readAuthCookieInventory(request: {
     conflict:
       (duplicated && !identicalDuplicates) ||
       candidates.length > 1 ||
-      revocationOnly.length > 0,
+      revocationOnly.length > 0 ||
+      /* Copies never assembled may hold anything; a name-keyed reader
+         has no such limit and would adopt them. */
+      truncated,
   };
 }
 

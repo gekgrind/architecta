@@ -518,7 +518,10 @@ export async function resolveSessionConflict(
   for (const { candidate, verdict } of assessments) {
     if (verdict.kind !== "gone") continue;
 
-    const probe = await refreshSession(config, candidate.refreshToken, now);
+    /* A half session's missing refresh token is no credential at all. */
+    const probe = candidate.refreshToken
+      ? await refreshSession(config, candidate.refreshToken, now)
+      : ({ kind: "gone" } as const);
 
     if (probe.kind === "gone") {
       ruledOut.add(candidate);
@@ -739,6 +742,10 @@ export async function revokeSessionCandidates(
   );
 
   judged.forEach((candidate, index) => {
+    /* A half session without an access token: only its refresh token
+       is a credential, judged below. */
+    if (!candidate.accessToken) return;
+
     const verdict = accessResults[index];
     /* Evidence only when the answer checked the token's signature. */
     const sub = claimsOf(candidate.accessToken).sub;
@@ -770,6 +777,8 @@ export async function revokeSessionCandidates(
 
   /* 2. Refresh tokens, in order. */
   for (const candidate of judged) {
+    if (!candidate.refreshToken) continue;
+
     const refreshed = await refreshSession(config, candidate.refreshToken, now);
 
     if (refreshed.kind === "gone") {

@@ -159,6 +159,116 @@ describe("a grafted-profile session alone", () => {
   });
 });
 
+describe("half a session", () => {
+  it("a lone refresh token beside a real session is revoked by logout", async () => {
+    const jar = new BrowserCookieJar();
+    plant(jar, api.generation({ sessionId: SESSION_A, bulky: true }), "shared-domain");
+    plant(
+      jar,
+      {
+        ...api.generation({ sessionId: SESSION_B, userId: OTHER_USER_ID, expiresIn: -60 }),
+        access_token: null,
+      },
+      "host-only"
+    );
+    expect(readAuthCookieInventory(request("/dashboard", jar)).revocationOnly).toHaveLength(1);
+
+    const response = await logout(logoutRequest(jar));
+
+    expect(api.isLive(SESSION_A)).toBe(false);
+    expect(api.isLive(SESSION_B)).toBe(false);
+    expect(response.headers.get("x-auth-revocation")).toBe("complete");
+  });
+
+  it("a lone access token beside a real session is revoked by logout", async () => {
+    const jar = new BrowserCookieJar();
+    plant(jar, api.generation({ sessionId: SESSION_A, bulky: true }), "shared-domain");
+    plant(
+      jar,
+      {
+        ...api.generation({ sessionId: SESSION_B, userId: OTHER_USER_ID }),
+        refresh_token: null,
+      },
+      "host-only"
+    );
+
+    const response = await logout(logoutRequest(jar));
+
+    expect(api.isLive(SESSION_A)).toBe(false);
+    expect(api.isLive(SESSION_B)).toBe(false);
+    expect(response.headers.get("x-auth-revocation")).toBe("complete");
+  });
+
+  it("alone, it is never refreshed or deleted by a request", async () => {
+    const jar = new BrowserCookieJar();
+    plant(
+      jar,
+      {
+        ...api.generation({ sessionId: SESSION_B, userId: OTHER_USER_ID, expiresIn: -60 }),
+        access_token: null,
+      },
+      "shared-domain"
+    );
+    const before = jar.header();
+
+    const response = await middleware(request("/dashboard", jar));
+
+    expect(response.headers.get("location") ?? "").toContain(
+      `${SESSION_RECOVERY_PATH}?reason=session-unresolved`
+    );
+    expect(api.state.refreshCalls).toBe(0);
+    jar.apply(response);
+    expect(jar.header()).toBe(before);
+  });
+});
+
+describe("a session split past the assembly budget", () => {
+  it("is never served or refreshed, and its cookies stay", async () => {
+    const jar = new BrowserCookieJar();
+    const encoded = `base64-${Buffer.from(
+      JSON.stringify(grafted({ sessionId: SESSION_B, expiresIn: -60 }))
+    ).toString("base64url")}`;
+    const size = Math.max(1, Math.floor(encoded.length / 70));
+    for (let index = 0; index * size < encoded.length; index += 1) {
+      jar.set(`${KEY}.${index}`, encoded.slice(index * size, (index + 1) * size), "shared-domain");
+    }
+    expect(jar.names("shared-domain", KEY).length).toBeGreaterThanOrEqual(65);
+    const inventory = readAuthCookieInventory(request("/dashboard", jar));
+    expect(inventory.candidatesTruncated).toBe(true);
+    expect(inventory.conflict).toBe(true);
+    const before = jar.header();
+
+    const response = await middleware(request("/dashboard", jar));
+
+    expect(response.headers.get("location") ?? "").toContain(
+      `${SESSION_RECOVERY_PATH}?reason=session-unresolved`
+    );
+    expect(api.state.refreshCalls).toBe(0);
+    expect(sessionWrites(response)).toEqual([]);
+    jar.apply(response);
+    expect(jar.header()).toBe(before);
+  });
+});
+
+describe("logout behind the bind address", () => {
+  it("expires the shared session in both scopes even when revocation fails", async () => {
+    const jar = new BrowserCookieJar();
+    plant(jar, api.generation({ sessionId: SESSION_A, bulky: true }), "shared-domain");
+    api.state.logoutFailure = 500;
+
+    /* nginx forwards the public Host; only request.url is the bind address. */
+    const response = await logout(logoutRequest(jar, BIND));
+
+    expect(response.headers.get("x-auth-revocation")).toBe("incomplete");
+    expect(response.headers.get("location")).toBe(
+      `${ORIGIN}${SESSION_RECOVERY_PATH}?status=incomplete`
+    );
+    jar.apply(response);
+    expect(jar.names("shared-domain", KEY)).toEqual([]);
+    expect(jar.names("host-only", KEY)).toEqual([]);
+  });
+});
+
 describe("a grafted-profile session beside a real one", () => {
   it("survives an ordinary request untouched, then sign-out revokes it", async () => {
     const jar = new BrowserCookieJar();

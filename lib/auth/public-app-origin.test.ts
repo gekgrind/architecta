@@ -41,7 +41,8 @@ const SHARED_LOGIN = "https://entrepreneuria.io/login";
 function bindRequest(path: string, init: { method?: string; headers?: Record<string, string> } = {}) {
   return new NextRequest(`${BIND}${path}`, {
     method: init.method ?? "GET",
-    headers: { host: "localhost:3000", ...init.headers },
+    /* nginx forwards the public Host; only request.url is the bind address. */
+    headers: { host: "architecta.entrepreneuria.io", ...init.headers },
   });
 }
 
