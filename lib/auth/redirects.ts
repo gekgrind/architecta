@@ -8,6 +8,10 @@ import {
 
 export const APP_HOME_PATH = "/dashboard";
 export const LOGIN_PATH = "/auth/login";
+export const LOGOUT_PATH = "/auth/logout";
+/* Sign-out confirmation and session recovery: a page, since the
+   logout route itself only signs out on POST. */
+export const SESSION_RECOVERY_PATH = `${LOGOUT_PATH}/confirm`;
 export const SIGNUP_PATH = "/auth/signup";
 export const CHECK_EMAIL_PATH = "/auth/check-email";
 export const ACCESS_DENIED_PATH = "/access-denied";
@@ -210,4 +214,32 @@ export function getPostAuthRedirectPath(
   }
 
   return safeNextPath;
+}
+
+/** Why the visitor was sent to the session recovery page. */
+export type SessionRecoveryReason =
+  /** Two accepted sessions name different accounts. */
+  | "session-conflict"
+  /** Several saved sessions, none of which can be chosen safely. */
+  | "session-unresolved"
+  /** The Auth API could not be reached to check them. */
+  | "auth-unavailable";
+
+export const SESSION_RECOVERY_REASONS: readonly SessionRecoveryReason[] = [
+  "session-conflict",
+  "session-unresolved",
+  "auth-unavailable",
+];
+
+export function buildSessionRecoveryHref(
+  reason: SessionRecoveryReason,
+  nextPath?: string | null
+) {
+  const params = new URLSearchParams({ reason });
+
+  if (nextPath) {
+    params.set("next", sanitizePostAuthRedirectPath(nextPath));
+  }
+
+  return `${SESSION_RECOVERY_PATH}?${params.toString()}`;
 }

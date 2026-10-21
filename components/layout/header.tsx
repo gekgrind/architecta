@@ -4,8 +4,7 @@ import Link from "next/link";
 import { Search, Bell, HelpCircle, ChevronRight, Settings, LogOut, User } from "lucide-react";
 
 import { useAuthIdentity } from "@/hooks/use-auth-identity";
-import { buildSharedLoginHref } from "@/lib/auth/redirects";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { submitLogout } from "@/lib/auth/logout-client";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -26,15 +25,10 @@ interface HeaderProps {
 export function Header({ breadcrumbs = [], className }: HeaderProps) {
   const { avatarUrl, displayName } = useAuthIdentity();
 
-  async function handleLogout() {
-    try {
-      const supabase = createSupabaseBrowserClient();
-      await supabase.auth.signOut();
-    } catch {
-      // Redirect through shared auth even if local session cleanup is unavailable.
-    }
-
-    window.location.assign(buildSharedLoginHref());
+  function handleLogout() {
+    /* The route revokes and expires every copy of the session, in every
+       scope, then sends the visitor to shared auth. */
+    submitLogout();
   }
 
   return (
@@ -104,9 +98,9 @@ export function Header({ breadcrumbs = [], className }: HeaderProps) {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-red-600" onClick={() => void handleLogout()}>
+            <DropdownMenuItem className="text-red-600" onClick={handleLogout}>
               <LogOut className="mr-2 h-4 w-4" />
-              Log out
+              Log out of all devices
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

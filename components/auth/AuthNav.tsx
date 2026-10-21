@@ -3,26 +3,21 @@
 import Link from "next/link";
 
 import { useAuthIdentity } from "@/hooks/use-auth-identity";
+import { submitLogout } from "@/lib/auth/logout-client";
 import {
   buildSharedLoginHref,
   buildSharedSignupHref,
 } from "@/lib/auth/redirects";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 
 export function AuthNav() {
   const { loading, isAuthenticated, displayName, avatarUrl } = useAuthIdentity();
 
-  async function handleLogout() {
-    try {
-      const supabase = createSupabaseBrowserClient();
-      await supabase.auth.signOut();
-    } catch {
-      // Redirect through shared auth even if local session cleanup is unavailable.
-    }
-
-    window.location.assign(buildSharedLoginHref());
+  function handleLogout() {
+    /* The route revokes and expires every copy of the session, in every
+       scope, then sends the visitor to shared auth. */
+    submitLogout();
   }
 
   if (loading) return null;
@@ -52,8 +47,8 @@ export function AuthNav() {
 
       <span className="text-sm font-medium">{displayName}</span>
 
-      <Button variant="ghost" size="sm" onClick={() => void handleLogout()}>
-        Log out
+      <Button variant="ghost" size="sm" onClick={handleLogout}>
+        Log out of all devices
       </Button>
     </div>
   );

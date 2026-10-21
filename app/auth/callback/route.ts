@@ -7,13 +7,31 @@ import {
   sanitizePostAuthRedirectPath,
 } from "@/lib/auth/redirects";
 import { getArchitectaOnboardingStatus } from "@/lib/onboarding/server";
+import { applyAuthResponseHeaders } from "@/lib/supabase/auth-cookie-cleanup";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const nextTarget = url.searchParams.get("next");
   const nextPath = sanitizePostAuthRedirectPath(nextTarget);
-  const supabase = await createSupabaseServerClient();
+  /* Whatever Supabase sends with a session write, on top of the
+     anti-cache defaults every redirect here carries. */
+  let supabaseHeaders: Record<string, string> = {};
+  const supabase = await createSupabaseServerClient({
+    onAuthResponseHeaders(headers) {
+      supabaseHeaders = { ...supabaseHeaders, ...headers };
+    },
+  });
+
+  /* getUser() below may refresh the session, so no redirect may be
+     cached beside a Set-Cookie. */
+  function redirect(target: URL) {
+    const response = NextResponse.redirect(target);
+    applyAuthResponseHeaders(response);
+    applyAuthResponseHeaders(response, supabaseHeaders);
+
+    return response;
+  }
 
   const {
     data: { user },
@@ -23,10 +41,10 @@ export async function GET(request: Request) {
     const loginHref = buildSharedLoginHref(nextTarget ?? nextPath);
 
     if (hasSharedAuthLoopRisk(url, loginHref)) {
-      return NextResponse.redirect(new URL("/", request.url));
+      return redirect(new URL("/", request.url));
     }
 
-    return NextResponse.redirect(new URL(loginHref, request.url));
+    return redirect(new URL(loginHref, request.url));
   }
 
   const onboarding = await getArchitectaOnboardingStatus();
@@ -36,5 +54,5 @@ export async function GET(request: Request) {
     nextTarget ?? nextPath
   );
 
-  return NextResponse.redirect(new URL(redirectPath, request.url));
+  return redirect(new URL(redirectPath, request.url));
 }
