@@ -4,30 +4,42 @@ type HeaderReader = { get(name: string): string | null };
 
 const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
+/** Where Architecta is served when nothing configures it otherwise. */
+export const CANONICAL_APP_ORIGIN = "https://architecta.entrepreneuria.io";
+
+type AppRequest = { nextUrl: { origin: string; hostname: string } };
+
+/**
+ * The origin Architecta's own pages are served from, for redirects and
+ * the sign-out origin check alike.
+ *
+ * The configured `NEXT_PUBLIC_ARCHITECTA_APP_URL` when there is one,
+ * never a forwarded header: `X-Forwarded-Host` is only trustworthy
+ * behind a proxy that overwrites it, which this code cannot know. Not
+ * the request's own origin in production either: under `next start`
+ * behind nginx a route handler's `request.url` is the bind address
+ * (`http://localhost:3000`), so a redirect built on it sends visitors to
+ * localhost, and a POST from the real site would be refused. Without a
+ * configured URL, production falls back to the canonical origin; local
+ * development uses the request's origin.
+ */
+export function getPublicAppOrigin(request: AppRequest) {
+  const configured = getUrlOrigin(getEcosystemAppUrl("architecta"));
+
+  if (configured) return configured;
+
+  return process.env.NODE_ENV === "production"
+    ? CANONICAL_APP_ORIGIN
+    : request.nextUrl.origin;
+}
+
 /**
  * The origins Architecta's own pages are served from, compared whole
- * (scheme, host and port).
- *
- * In production that is the configured `NEXT_PUBLIC_ARCHITECTA_APP_URL`,
- * never a forwarded header: `X-Forwarded-Host` is only trustworthy behind
- * a proxy that overwrites it, which this code cannot know. Locally, the
- * loopback origin the request was made to is accepted too. Without a
- * configured URL the request's own origin is used — a cross-site page
- * cannot choose the Host a victim's browser sends, so that still
- * defeats forgery, but a TLS-terminating proxy that rewrites the scheme
- * would then refuse legitimate sign-outs; configure the URL.
+ * (scheme, host and port): `getPublicAppOrigin`, plus locally the
+ * loopback origin the request was made to.
  */
-export function getTrustedAppOrigins(request: {
-  nextUrl: { origin: string; hostname: string };
-}) {
-  const configured = getUrlOrigin(getEcosystemAppUrl("architecta"));
-  const origins = new Set<string>();
-
-  if (configured) {
-    origins.add(configured);
-  } else {
-    origins.add(request.nextUrl.origin);
-  }
+export function getTrustedAppOrigins(request: AppRequest) {
+  const origins = new Set<string>([getPublicAppOrigin(request)]);
 
   if (
     process.env.NODE_ENV !== "production" &&

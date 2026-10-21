@@ -419,6 +419,8 @@ function byNewestHint(candidates: SessionCandidate[]) {
 type Assessment = {
   candidate: SessionCandidate;
   verdict: AccessVerdict | { kind: "expired" };
+  /** A `revocationOnly` pair: it may keep cookies alive, never serve. */
+  ineligible: boolean;
 };
 
 export async function resolveSessionConflict(
@@ -426,17 +428,20 @@ export async function resolveSessionConflict(
   baseConfig: SupabaseConfig,
   { now = Date.now() }: { now?: number } = {}
 ): Promise<SessionResolution> {
-  const { candidates } = inventory;
   const config = {
     ...baseConfig,
     deadline: baseConfig.deadline ?? now + RESOLUTION_BUDGET_MS,
   };
+  /* `revocationOnly` pairs are judged beside the candidates: a live one
+     is another credential no settlement may delete, and an ambiguity
+     like any other. None of them is ever pinned, refreshed or adopted. */
+  const judged = [
+    ...inventory.candidates.map((candidate) => ({ candidate, ineligible: false })),
+    ...inventory.revocationOnly.map((candidate) => ({ candidate, ineligible: true })),
+  ];
 
   /* Copies that were never judged might hold a live session. */
-  if (
-    inventory.candidatesTruncated ||
-    candidates.length > MAX_JUDGED_CANDIDATES
-  ) {
+  if (inventory.candidatesTruncated || judged.length > MAX_JUDGED_CANDIDATES) {
     return { status: "unresolved" };
   }
 
@@ -446,8 +451,9 @@ export async function resolveSessionConflict(
         An expired-looking one is not worth asking about — a real token's
         `exp` is accurate, and a forged one is refused either way. */
   const assessments: Assessment[] = await Promise.all(
-    candidates.map(async (candidate) => ({
+    judged.map(async ({ candidate, ineligible }) => ({
       candidate,
+      ineligible,
       verdict:
         candidate.tokenExpiresAt !== null && candidate.tokenExpiresAt > nowSeconds
           ? await checkAccessToken(config, candidate.accessToken)
@@ -472,8 +478,14 @@ export async function resolveSessionConflict(
   /* An accepted access token may serve the request only with enough life
      left that no client refreshes it during the request, and only with a
      `session_id` tying the request to one sign-in. */
+  const eligible = new Set(
+    assessments.flatMap(({ candidate, ineligible }) =>
+      ineligible ? [] : [candidate]
+    )
+  );
   const servable = live.filter(
-    ({ verified }) =>
+    ({ candidate, verified }) =>
+      eligible.has(candidate) &&
       verified.sessionId !== null &&
       verified.exp - nowSeconds > ACCESS_HEADROOM_SECONDS
   );
@@ -533,7 +545,11 @@ export async function resolveSessionConflict(
         an access token the Auth API accepted in this request: that is
         what makes the token's `session_id` and `sub` evidence rather
         than claims. */
-  const [{ candidate, verdict: access }] = open;
+  const [{ candidate, verdict: access, ineligible }] = open;
+
+  /* A grafted-profile pair is never refreshed or adopted: it stays as it
+     is until a sign-out judges it. */
+  if (ineligible) return pinned ?? { status: "unresolved" };
 
   if (access.kind === "live" && access.sessionId === null) {
     return { status: "unresolved" };
@@ -696,11 +712,12 @@ export async function revokeSessionCandidates(
     deadline: baseConfig.deadline ?? now + SIGN_OUT_BUDGET_MS,
   };
   const nowSeconds = Math.floor(now / 1000);
-  const judged = byNewestHint(
-    inventory.candidates.slice(0, MAX_JUDGED_CANDIDATES)
-  );
+  /* Grafted-profile pairs are credentials too: each is judged on its own
+     tokens, and `userId` is already the token's `sub`. */
+  const credentialSets = [...inventory.candidates, ...inventory.revocationOnly];
+  const judged = byNewestHint(credentialSets.slice(0, MAX_JUDGED_CANDIDATES));
   const skipped =
-    inventory.candidates.length -
+    credentialSets.length -
     judged.length +
     (inventory.candidatesTruncated ? 1 : 0);
   const credentials: Credential[] = [];
@@ -802,7 +819,7 @@ export async function revokeSessionCandidates(
 
   return {
     status,
-    candidates: inventory.candidates.length,
+    candidates: credentialSets.length,
     revoked: count("revoked"),
     alreadyInvalid: count("invalid"),
     uncertain,

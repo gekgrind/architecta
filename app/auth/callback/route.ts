@@ -6,12 +6,16 @@ import {
   hasSharedAuthLoopRisk,
   sanitizePostAuthRedirectPath,
 } from "@/lib/auth/redirects";
+import { getPublicAppOrigin } from "@/lib/auth/same-origin";
 import { getArchitectaOnboardingStatus } from "@/lib/onboarding/server";
 import { applyAuthResponseHeaders } from "@/lib/supabase/auth-cookie-cleanup";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
+  /* Redirect base: the public origin, never the `next start` bind
+     address that `request.url` names behind nginx. */
+  const publicOrigin = getPublicAppOrigin({ nextUrl: url });
   const nextTarget = url.searchParams.get("next");
   const nextPath = sanitizePostAuthRedirectPath(nextTarget);
   /* Whatever Supabase sends with a session write, on top of the
@@ -41,10 +45,10 @@ export async function GET(request: Request) {
     const loginHref = buildSharedLoginHref(nextTarget ?? nextPath);
 
     if (hasSharedAuthLoopRisk(url, loginHref)) {
-      return redirect(new URL("/", request.url));
+      return redirect(new URL("/", publicOrigin));
     }
 
-    return redirect(new URL(loginHref, request.url));
+    return redirect(new URL(loginHref, publicOrigin));
   }
 
   const onboarding = await getArchitectaOnboardingStatus();
@@ -54,5 +58,5 @@ export async function GET(request: Request) {
     nextTarget ?? nextPath
   );
 
-  return redirect(new URL(redirectPath, request.url));
+  return redirect(new URL(redirectPath, publicOrigin));
 }

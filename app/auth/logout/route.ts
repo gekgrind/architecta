@@ -7,6 +7,7 @@ import {
   sanitizePostAuthRedirectPath,
 } from "@/lib/auth/redirects";
 import {
+  getPublicAppOrigin,
   getTrustedAppOrigins,
   isSameOriginRequest,
 } from "@/lib/auth/same-origin";
@@ -34,7 +35,8 @@ import { getSharedSupabaseCookieOptions } from "@/lib/supabase/cookies";
  */
 
 export function GET(request: NextRequest) {
-  const target = new URL(SESSION_RECOVERY_PATH, request.url);
+  /* On the public origin, never the `next start` bind address. */
+  const target = new URL(SESSION_RECOVERY_PATH, getPublicAppOrigin(request));
   const reason = request.nextUrl.searchParams.get("reason");
   const next = request.nextUrl.searchParams.get("next");
 
@@ -93,6 +95,7 @@ export async function POST(request: NextRequest) {
   const status: RevocationStatus =
     report?.status ??
     (authCookies.candidates.length > 0 ||
+    authCookies.revocationOnly.length > 0 ||
     authCookies.candidatesTruncated ||
     authCookies.legacy.length > 0
       ? "incomplete"
@@ -101,10 +104,11 @@ export async function POST(request: NextRequest) {
   /* Only a confirmed sign-out everywhere goes straight to sign-in.
      Anything less lands on a page that says what was and wasn't
      confirmed. No retry happens on its own. */
+  const publicOrigin = getPublicAppOrigin(request);
   const response = NextResponse.redirect(
     status === "complete"
-      ? new URL(buildSharedLoginHref("/dashboard"), request.url)
-      : new URL(`${SESSION_RECOVERY_PATH}?status=${status}`, request.url),
+      ? new URL(buildSharedLoginHref("/dashboard"), publicOrigin)
+      : new URL(`${SESSION_RECOVERY_PATH}?status=${status}`, publicOrigin),
     303
   );
 
@@ -120,7 +124,9 @@ export async function POST(request: NextRequest) {
     console.warn("[auth] sign-out not confirmed everywhere", {
       status,
       configured: Boolean(supabaseConfig),
-      candidates: report?.candidates ?? authCookies.candidates.length,
+      candidates:
+        report?.candidates ??
+        authCookies.candidates.length + authCookies.revocationOnly.length,
       revoked: report?.revoked ?? 0,
       alreadyInvalid: report?.alreadyInvalid ?? 0,
       uncertain: report?.uncertain ?? 0,
