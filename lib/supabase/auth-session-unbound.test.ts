@@ -250,6 +250,66 @@ describe("a session split past the assembly budget", () => {
   });
 });
 
+describe("a stored session with a field left out", () => {
+  function omit(session: Record<string, unknown>, field: string) {
+    const rest = { ...session };
+    delete rest[field];
+    return rest;
+  }
+
+  for (const [label, field, expiresIn] of [
+    ["without an access_token", "access_token", -60],
+    ["without a refresh_token", "refresh_token", 3600],
+    ["without an expires_at", "expires_at", 3600],
+  ] as const) {
+    it(`${label}, beside a real session, is held and revoked by sign-out`, async () => {
+      const jar = new BrowserCookieJar();
+      plant(jar, api.generation({ sessionId: SESSION_A, bulky: true }), "shared-domain");
+      plant(
+        jar,
+        omit(api.generation({ sessionId: SESSION_B, userId: OTHER_USER_ID, expiresIn }), field),
+        "host-only"
+      );
+      const inventory = readAuthCookieInventory(request("/dashboard", jar));
+      expect(inventory.revocationOnly).toHaveLength(1);
+      expect(inventory.conflict).toBe(true);
+
+      const hostOnlyBefore = jar.names("host-only", KEY);
+      const response = await middleware(request("/dashboard", jar));
+      jar.apply(response);
+      expect(jar.names("host-only", KEY)).toEqual(hostOnlyBefore);
+      expect(api.isLive(SESSION_B)).toBe(true);
+
+      const signedOut = await logout(logoutRequest(jar));
+      expect(api.isLive(SESSION_A)).toBe(false);
+      expect(api.isLive(SESSION_B)).toBe(false);
+      expect(signedOut.headers.get("x-auth-revocation")).toBe("complete");
+    });
+  }
+});
+
+describe("an expiry no number can be read from", () => {
+  /* `Number()` throws on an object whose valueOf/toString are not callable. */
+  const hostileExpiry = { valueOf: null, toString: null };
+
+  it("does not fail the request, and sign-out still revokes the session", async () => {
+    const jar = new BrowserCookieJar();
+    plant(
+      jar,
+      { ...api.generation({ sessionId: SESSION_A, bulky: true }), expires_at: hostileExpiry },
+      "shared-domain"
+    );
+
+    expect(() => readAuthCookieInventory(request("/dashboard", jar))).not.toThrow();
+    const response = await middleware(request("/dashboard", jar));
+    expect(response.status).not.toBe(500);
+
+    const signedOut = await logout(logoutRequest(jar));
+    expect(api.isLive(SESSION_A)).toBe(false);
+    expect(signedOut.headers.get("x-auth-revocation")).toBe("complete");
+  });
+});
+
 describe("logout behind the bind address", () => {
   it("expires the shared session in both scopes even when revocation fails", async () => {
     const jar = new BrowserCookieJar();
