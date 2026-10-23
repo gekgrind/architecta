@@ -8,6 +8,10 @@ import {
 
 export const APP_HOME_PATH = "/dashboard";
 export const LOGIN_PATH = "/auth/login";
+export const LOGOUT_PATH = "/auth/logout";
+/* Sign-out confirmation and session recovery: a page, since the
+   logout route itself only signs out on POST. */
+export const SESSION_RECOVERY_PATH = `${LOGOUT_PATH}/confirm`;
 export const SIGNUP_PATH = "/auth/signup";
 export const CHECK_EMAIL_PATH = "/auth/check-email";
 export const ACCESS_DENIED_PATH = "/access-denied";
@@ -19,8 +23,41 @@ const SAFE_SHARED_AUTH_FALLBACK_PATH = "/";
 
 type SearchParamValue = string | string[] | undefined;
 
+const RELATIVE_PATH_PROBE_ORIGIN = "https://redirect.invalid";
+
+/**
+ * A path on this site, and nothing a URL parser could read as another
+ * host. Browsers treat `\` like `/` and drop tabs and newlines, so
+ * `/\evil.example` or `/<TAB>/evil.example` resolve to
+ * `https://evil.example/`; anything with a backslash or a control
+ * character is refused outright, and what is left must still resolve
+ * onto the origin it was resolved against.
+ */
+export function isSafeRelativePath(value: string) {
+  if (
+    !value.startsWith("/") ||
+    value[1] === "/" ||
+    value.includes("\\") ||
+    [...value].some((char) => {
+      const code = char.charCodeAt(0);
+      return code <= 0x1f || code === 0x7f;
+    })
+  ) {
+    return false;
+  }
+
+  try {
+    return (
+      new URL(value, RELATIVE_PATH_PROBE_ORIGIN).origin ===
+      RELATIVE_PATH_PROBE_ORIGIN
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function sanitizeAuthRedirectPath(nextPath?: string | null) {
-  if (!nextPath || !nextPath.startsWith("/") || nextPath.startsWith("//")) {
+  if (!nextPath || !isSafeRelativePath(nextPath)) {
     return APP_HOME_PATH;
   }
 
@@ -210,4 +247,32 @@ export function getPostAuthRedirectPath(
   }
 
   return safeNextPath;
+}
+
+/** Why the visitor was sent to the session recovery page. */
+export type SessionRecoveryReason =
+  /** Two accepted sessions name different accounts. */
+  | "session-conflict"
+  /** Several saved sessions, none of which can be chosen safely. */
+  | "session-unresolved"
+  /** The Auth API could not be reached to check them. */
+  | "auth-unavailable";
+
+export const SESSION_RECOVERY_REASONS: readonly SessionRecoveryReason[] = [
+  "session-conflict",
+  "session-unresolved",
+  "auth-unavailable",
+];
+
+export function buildSessionRecoveryHref(
+  reason: SessionRecoveryReason,
+  nextPath?: string | null
+) {
+  const params = new URLSearchParams({ reason });
+
+  if (nextPath) {
+    params.set("next", sanitizePostAuthRedirectPath(nextPath));
+  }
+
+  return `${SESSION_RECOVERY_PATH}?${params.toString()}`;
 }

@@ -5,6 +5,7 @@ import { LogOut, Settings, UserCircle } from "lucide-react";
 import Link from "next/link";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { submitLogout } from "@/lib/auth/logout-client";
 import { resolveSidebarUserIdentity } from "@/lib/navigation/sidebar-model";
 import type { SidebarUser } from "@/lib/navigation/types";
 import { cn } from "@/lib/utils";
@@ -157,12 +158,12 @@ export function SidebarUserMenu({ user, isExpanded }: SidebarUserMenuProps) {
             role="menuitem"
             onClick={() => {
               closeMenu();
-              window.location.href = "/auth/logout";
+              submitLogout();
             }}
             className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[#BCC0D8] transition-colors hover:bg-white/5 hover:text-white"
           >
             <LogOut className="h-4 w-4" aria-hidden="true" />
-            Sign Out
+            Sign Out of All Devices
           </button>
         </div>
       ) : null}

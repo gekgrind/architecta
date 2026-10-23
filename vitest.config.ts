@@ -15,7 +15,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["**/*.test.ts"],
-    exclude: ["node_modules/**", ".next/**"],
+    // `.claude/worktrees/` holds other branches' checkouts (git-excluded).
+    exclude: ["node_modules/**", ".next/**", ".claude/**"],
     clearMocks: true,
   },
 });
