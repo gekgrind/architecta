@@ -1,4 +1,4 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 import {
@@ -17,6 +17,8 @@ import {
   getSharedSupabaseCookieOptions,
   mergeSharedSupabaseCookieOptions,
 } from "@/lib/supabase/cookies";
+
+type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 const PROTECTED_PREFIXES = [
   "/analytics",
@@ -40,7 +42,7 @@ export async function middleware(req: NextRequest) {
   const sharedCookieOptions = getSharedSupabaseCookieOptions(
     req.headers.get("host")
   );
-  const res = NextResponse.next();
+  const sessionCookies: CookieToSet[] = [];
 
   const supabase = createServerClient(url, anonKey, {
     cookieOptions: sharedCookieOptions,
@@ -49,16 +51,32 @@ export async function middleware(req: NextRequest) {
         return req.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) => {
-          res.cookies.set(
-            name,
-            value,
-            mergeSharedSupabaseCookieOptions(sharedCookieOptions, options)
-          );
-        });
+        sessionCookies.push(...cookiesToSet);
       },
     },
   });
+
+  /*
+   * Every response leaves through here, redirects included. A refresh
+   * inside getUser() has already spent the old refresh token, so a
+   * response that drops the rotated chunks (or the deletions of a revoked
+   * session) leaves the browser replaying a used token.
+   */
+  function withSessionUpdates(response: NextResponse) {
+    for (const { name, value, options } of sessionCookies) {
+      response.cookies.set(
+        name,
+        value,
+        mergeSharedSupabaseCookieOptions(sharedCookieOptions, options)
+      );
+    }
+
+    return response;
+  }
+
+  function redirectTo(path: string) {
+    return withSessionUpdates(NextResponse.redirect(new URL(path, req.url)));
+  }
 
   const {
     data: { user },
@@ -75,9 +93,7 @@ export async function middleware(req: NextRequest) {
 
   if (isProtected && !user) {
     const nextPath = `${pathname}${req.nextUrl.search}`;
-    return NextResponse.redirect(
-      new URL(buildSharedLoginHref(nextPath), req.url)
-    );
+    return redirectTo(buildSharedLoginHref(nextPath));
   }
 
   let onboardingComplete = false;
@@ -101,11 +117,11 @@ export async function middleware(req: NextRequest) {
       req.nextUrl.searchParams.get("next")
     );
 
-    return NextResponse.redirect(new URL(redirectPath, req.url));
+    return redirectTo(redirectPath);
   }
 
   if (user && !hasAccess && isProtected) {
-    return NextResponse.redirect(new URL(ACCESS_DENIED_PATH, req.url));
+    return redirectTo(ACCESS_DENIED_PATH);
   }
 
   if (user && onboardingComplete && isOnboarding) {
@@ -113,7 +129,7 @@ export async function middleware(req: NextRequest) {
       process.env.NODE_ENV === "development" &&
       pathname.startsWith("/onboarding/preview");
     if (!isDevPreview) {
-      return NextResponse.redirect(new URL(APP_HOME_PATH, req.url));
+      return redirectTo(APP_HOME_PATH);
     }
   }
 
@@ -134,10 +150,10 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/app/architecta");
 
   if (user && isArchitectaArea && !isOnboarding && !onboardingComplete) {
-    return NextResponse.redirect(new URL(ONBOARDING_PATH, req.url));
+    return redirectTo(ONBOARDING_PATH);
   }
 
-  return res;
+  return withSessionUpdates(NextResponse.next());
 }
 
 export const config = {

@@ -3,6 +3,7 @@ import { ResponseCookies } from "next/dist/compiled/@edge-runtime/cookies";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ONBOARDING_SESSION_STATUS } from "@/lib/onboarding/gate";
 import {
   ENTREPRENEURIA_AUTH_COOKIE_NAME,
   mergeSharedSupabaseCookieOptions,
@@ -66,16 +67,21 @@ async function readAsSiblingApp(jar: Map<string, string>) {
   // getSession warns that cookie data is unauthenticated; decoding it is exactly what is under test.
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   const { data } = await reader.auth.getSession();
+  const read = data.session && { access_token: data.session.access_token, userId: data.session.user.id };
   warn.mockRestore();
-  return data.session;
+  return read;
 }
 
-function stubProvider(rotated: ReturnType<typeof session>) {
+function stubProvider(
+  rotated: ReturnType<typeof session>,
+  rows: { profile?: Record<string, unknown>; onboardingStatus?: string } = {}
+) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.includes("/auth/v1/token?grant_type=refresh_token")) return Response.json(rotated);
     if (url.includes("/auth/v1/user")) return Response.json(rotated.user);
-    if (url.includes("/rest/v1/")) return Response.json(null);
+    if (url.includes("/rest/v1/profiles")) return Response.json(rows.profile ?? null);
+    if (url.includes("/rest/v1/onboarding_sessions")) return Response.json(rows.onboardingStatus ? { status: rows.onboardingStatus } : null);
     throw new Error(`unexpected request ${url}`);
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -152,7 +158,56 @@ describe.each([
     expect([...jar.keys()].sort()).toEqual(expected.map(({ name }) => name).sort());
     const read = await readAsSiblingApp(jar);
     expect(read?.access_token).toBe(rotated.access_token);
-    expect(read?.user.id).toBe(userId);
+    expect(read?.userId).toBe(userId);
+  });
+});
+
+async function middlewareResponse(path: string, incoming: { name: string; value: string }[]) {
+  const { middleware } = await import("@/middleware");
+  return middleware(
+    new NextRequest(`https://architecta.entrepreneuria.io${path}`, {
+      headers: { host: "architecta.entrepreneuria.io", cookie: incoming.map(({ name, value }) => `${name}=${value}`).join("; ") },
+    })
+  );
+}
+
+// A refresh inside getUser() has already spent the old refresh token, so every redirect must carry the rotation.
+describe("middleware redirects after a refresh", () => {
+  it.each([
+    { label: "signed-in visit to the login page", path: "/auth/login", rows: {} },
+    { label: "protected page without Architecta access", path: "/dashboard", rows: { profile: { id: userId, architecta_access: false } } },
+    { label: "onboarding page after onboarding is complete", path: "/onboarding", rows: { onboardingStatus: ONBOARDING_SESSION_STATUS.completed } },
+    { label: "Architecta area before onboarding is complete", path: "/dashboard", rows: {} },
+  ])("$label carries the rotated chunks", async ({ path, rows }) => {
+    const prior = storedCookies(session("prior", 7000, -60));
+    const rotated = session("rotated", 4000, 3600);
+    stubProvider(rotated, rows);
+
+    const response = await middlewareResponse(path, prior);
+
+    expect(response.status).toBeGreaterThanOrEqual(300);
+    expect(response.status).toBeLessThan(400);
+    const jar = applySetCookies(new Map(prior.map(({ name, value }) => [name, value])), response.headers.getSetCookie());
+    expect([...jar.keys()].sort()).toEqual(storedCookies(rotated).map(({ name }) => name).sort());
+    expect((await readAsSiblingApp(jar))?.access_token).toBe(rotated.access_token);
+  });
+
+  it("carries the deletions of a revoked session onto the login redirect", async () => {
+    const prior = storedCookies(session("prior", 4000, -60));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("grant_type=refresh_token")) {
+        return Response.json({ code: "refresh_token_not_found", msg: "Invalid Refresh Token" }, { status: 400 });
+      }
+      throw new Error(`unexpected request ${String(input)}`);
+    }));
+
+    const response = await middlewareResponse("/dashboard", prior);
+
+    // Signed out on a protected page: sent to the shared login.
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).not.toContain("/dashboard");
+    const jar = applySetCookies(new Map(prior.map(({ name, value }) => [name, value])), response.headers.getSetCookie());
+    expect([...jar.keys()]).toEqual([]);
   });
 });
 
