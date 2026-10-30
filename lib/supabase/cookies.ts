@@ -1,4 +1,4 @@
-import type { CookieOptionsWithName } from "@supabase/ssr";
+import type { CookieOptions, CookieOptionsWithName } from "@supabase/ssr";
 
 import { getEcosystemCookieDomain } from "@/lib/config/ecosystem";
 
@@ -39,6 +39,26 @@ export function getSharedSupabaseCookieOptions(
     secure: useSharedDomain || process.env.NODE_ENV === "production",
     ...(useSharedDomain ? { domain } : {}),
   };
+}
+
+/**
+ * Options for one Set-Cookie write of a session chunk. The storage-key
+ * `name` must never reach a cookie setter: Next's
+ * `cookies.set(name, value, options)` spreads `options` over `name`, so a
+ * leaked `name` renamed every chunk (`entrepreneuria-auth-token.0`, `.1`,
+ * …) and every stale-chunk deletion to the bare key. The browser kept a
+ * single fragment under `entrepreneuria-auth-token`, which every app reads
+ * before the chunks, so the shared session decoded to invalid JSON
+ * ecosystem-wide. Scope attributes still override the per-write options.
+ */
+export function mergeSharedSupabaseCookieOptions(
+  sharedOptions: CookieOptionsWithName,
+  options: CookieOptions
+): CookieOptions {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { name: _storageKey, ...scope } = sharedOptions;
+
+  return { ...options, ...scope };
 }
 
 /** Browser-side variant: derives the hostname from `window.location`. */

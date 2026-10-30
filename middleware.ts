@@ -13,7 +13,10 @@ import {
 import { hasArchitectaAccess } from "@/lib/auth/profile";
 import { fetchArchitectaOnboardingComplete } from "@/lib/onboarding/gate";
 import { getSupabaseProjectConfig } from "@/lib/config/ecosystem";
-import { getSharedSupabaseCookieOptions } from "@/lib/supabase/cookies";
+import {
+  getSharedSupabaseCookieOptions,
+  mergeSharedSupabaseCookieOptions,
+} from "@/lib/supabase/cookies";
 
 const PROTECTED_PREFIXES = [
   "/analytics",
@@ -47,10 +50,11 @@ export async function middleware(req: NextRequest) {
       },
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value, options }) => {
-          res.cookies.set(name, value, {
-            ...options,
-            ...sharedCookieOptions,
-          });
+          res.cookies.set(
+            name,
+            value,
+            mergeSharedSupabaseCookieOptions(sharedCookieOptions, options)
+          );
         });
       },
     },
