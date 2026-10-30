@@ -3,7 +3,10 @@ import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { cookies, headers } from "next/headers";
 
-import { getSharedSupabaseCookieOptions } from "@/lib/supabase/cookies";
+import {
+  getSharedSupabaseCookieOptions,
+  mergeSharedSupabaseCookieOptions,
+} from "@/lib/supabase/cookies";
 
 export async function createSupabaseServerClient() {
   const cookieStore = await cookies();
@@ -24,10 +27,11 @@ export async function createSupabaseServerClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, {
-                ...options,
-                ...sharedCookieOptions,
-              });
+              cookieStore.set(
+                name,
+                value,
+                mergeSharedSupabaseCookieOptions(sharedCookieOptions, options)
+              );
             });
           } catch {
             // Route handlers still update cookies correctly; Server Components may not.
